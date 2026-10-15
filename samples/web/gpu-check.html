@@ -1,0 +1,5 @@
+<!doctype html><html><body><pre id=o>checking</pre><script>
+(async()=>{const o=document.getElementById('o');if(!navigator.gpu){o.textContent='NO navigator.gpu';return}
+const a=await navigator.gpu.requestAdapter();if(!a){o.textContent='no adapter';return}
+const info=a.info||{};o.textContent='OK '+JSON.stringify({vendor:info.vendor,arch:info.architecture,desc:info.description,features:[...a.features]})})()
+</script></body></html>

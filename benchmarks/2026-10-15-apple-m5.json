@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-15",
+  "machine": "Apple M5, 10 CPU cores, 8-core GPU, 16 GB, macOS 26.4.1",
+  "cpu": "Kotlin on OpenJDK 21.0.12 via KernelinCpu (median of 5 runs after 2 warmups)",
+  "gpu": "WebGPU in Chromium 152 (Dawn -> Metal), vendor apple, architecture metal-3",
+  "notes": "gpuKernelMs = data already on GPU, average of 20 back-to-back dispatches, median of 5. gpuEndToEndMs = upload inputs + run + read results back, median of 5.",
+  "results": [
+    {"name":"vectorAdd","size":16777216,"gpuKernelMs":1.82,"gpuEndToEndMs":29.8,"cpuSingleMs":24.815,"cpuParallelMs":6.955,"matchPct":100,"maxAbsErr":0},
+    {"name":"saxpy","size":16777216,"gpuKernelMs":1.645,"gpuEndToEndMs":20.7,"cpuSingleMs":24.027,"cpuParallelMs":8.726,"matchPct":100,"maxAbsErr":2.384185791015625e-7},
+    {"name":"blur","size":16777216,"gpuKernelMs":1.985,"gpuEndToEndMs":21.5,"cpuSingleMs":79.275,"cpuParallelMs":20.369,"matchPct":100,"maxAbsErr":5.960464477539063e-8},
+    {"name":"waves","size":4194304,"gpuKernelMs":4.63,"gpuEndToEndMs":10.0,"cpuSingleMs":3777.425,"cpuParallelMs":545.625,"matchPct":100,"maxAbsErr":2.9802322387695312e-8},
+    {"name":"mandelbrot","size":4194304,"gpuKernelMs":4.48,"gpuEndToEndMs":8.4,"cpuSingleMs":443.394,"cpuParallelMs":101.039,"matchPct":99.8199,"maxAbsErr":0}
+  ]
+}
