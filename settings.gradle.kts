@@ -17,5 +17,6 @@ include(
     "kernelin-runtime",
     "kernelin-compiler-plugin",
     "kernelin-gradle-plugin",
+    "kernelin-webgpu",
     "samples",
 )

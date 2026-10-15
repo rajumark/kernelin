@@ -3,8 +3,8 @@ package io.github.kernelin
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
-/** Runs kernels on the CPU. Used for unit tests and as the benchmark baseline. */
-object KernelinCpu {
+/** On the JVM, kernels can also run on all cores with [dispatchParallel]. */
+actual object KernelinCpu {
     // A mutable cell per thread avoids boxing an Int on every globalId() call.
     private class IdCell(var value: Int = -1)
 
@@ -16,14 +16,14 @@ object KernelinCpu {
         }
     }
 
-    internal fun currentId(): Int {
+    internal actual fun currentId(): Int {
         val id = current.get().value
         check(id >= 0) { "globalId() was called outside a Kernelin dispatch" }
         return id
     }
 
     /** Runs [kernel] once for every id in `0 until size`, on the calling thread. */
-    fun dispatch(size: Int, kernel: () -> Unit) {
+    actual fun dispatch(size: Int, kernel: () -> Unit) {
         val cell = current.get()
         try {
             for (i in 0 until size) {

@@ -18,6 +18,10 @@ class Compilation(val exitCode: ExitCode, val output: String, private val outDir
     fun wgslFiles(): List<File> = outDir.resolve("kernelin").listFiles { f -> f.extension == "wgsl" }?.sortedBy { it.name }.orEmpty()
 
     val errors: List<String> get() = output.lines().filter { "error:" in it }
+
+    /** Loads a compiled class, with the test classpath (runtime, stdlib) as parent. */
+    fun loadClass(name: String): Class<*> =
+        java.net.URLClassLoader(arrayOf(outDir.toURI().toURL()), javaClass.classLoader).loadClass(name)
 }
 
 object KernelinCompiler {

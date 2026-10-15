@@ -80,7 +80,7 @@
   <h1>⚡ Kotlin on your GPU, live</h1>
   <p class="subtitle">This fractal is computed on <b>your</b> GPU by a shader that the Kernelin compiler plugin generated from a plain Kotlin function. No hand-written GPU code.</p>
 
-  <div class="callout warn hidden" id="nogpu">⚠️ <div><b>WebGPU isn't available in this browser</b>, so the image is drawn on the CPU only. Try a recent Chrome, Edge or Safari (desktop or Android).</div></div>
+  <div class="callout warn hidden" id="nogpu">⚠️ <div><b>WebGPU isn't available in this browser</b>, so the image is drawn on the CPU only (still Kotlin, compiled to Wasm). Try a recent Chrome, Edge or Safari (desktop or Android).</div></div>
 
   <div class="stage">
     <canvas id="canvas" width="1600" height="1000" aria-label="Mandelbrot fractal. Click to zoom in, shift-click to zoom out."></canvas>
@@ -103,8 +103,8 @@
 
   <div class="stats">
     <div class="tile"><div class="k">GPU (compute + copy back)</div><div class="v" id="gpuMs">–</div><div class="s" id="gpuInfo">–</div></div>
-    <div class="tile"><div class="k">CPU (JavaScript, 1 core)</div><div class="v" id="cpuMs">–</div><div class="s">press "Race"</div></div>
-    <div class="tile"><div class="k">GPU is faster by</div><div class="v" id="speedup">–</div><div class="s">same frame, same math</div></div>
+    <div class="tile"><div class="k">CPU (Kotlin → Wasm, 1 core)</div><div class="v" id="cpuMs">–</div><div class="s">press "Race"</div></div>
+    <div class="tile"><div class="k">GPU is faster by</div><div class="v" id="speedup">–</div><div class="s">same frame, same Kotlin kernel</div></div>
     <div class="tile"><div class="k">Pixels</div><div class="v" id="pixels">–</div><div class="s" id="zoom">zoom 1×</div></div>
   </div>
   <p class="note" id="precision"></p>
@@ -118,23 +118,26 @@
   <pre><code id="code">loading...</code></pre>
 
   <h2>How it runs</h2>
-  <p>Kotlin <code>@Kernel</code> function → K2 compiler → Kernelin plugin (IR → WGSL) → <code>.wgsl</code> + <code>.json</code> manifest → this page loads them with a ~150-line WebGPU host (<a href="kernelin-web.js">kernelin-web.js</a>) → your GPU.</p>
-  <p class="note">The CPU side of the race is a JavaScript copy of the same loop running in the page, so both sides run in the same browser. Timings include copying the result back from the GPU, but not drawing it.</p>
+  <p>The whole page logic that matters is <b>Kotlin compiled to WebAssembly</b> (100 KB):</p>
+  <ul>
+    <li><b>GPU side:</b> the Kernelin compiler plugin translates <code>mandelbrotView</code> to WGSL and embeds it in place of <code>kernelSource(::mandelbrotView)</code>. The Kotlin WebGPU host (<code>kernelin-webgpu</code>) compiles it, packs the parameters and runs it on your GPU.</li>
+    <li><b>CPU side:</b> the very same <code>mandelbrotView</code> function, compiled to Wasm, called once per pixel by <code>KernelinCpu.dispatch</code>.</li>
+  </ul>
+  <p class="note">JavaScript only handles the buttons and paints the pixels. GPU timings include copying the result back from the GPU, but not drawing it. Source: <a href="https://github.com/rajumark/kernelin/blob/main/samples/src/wasmJsMain/kotlin/io/github/kernelin/samples/Demo.kt">Demo.kt</a>.</p>
 
   <p class="footer"><a href="../">Project report</a> · <a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a></p>
 </div>
 
 <script type="module">
-import { KernelinGpu } from './kernelin-web.js';
-
-const KERNEL = 'kernels/io.github.kernelin.samples.mandelbrotView';
+// UI and drawing only. All GPU work (WebGPU setup, uniforms, dispatch, read-back) and the CPU kernel are Kotlin,
+// compiled to Wasm from samples/ and kernelin-webgpu/. See samples/src/wasmJsMain/.../Demo.kt.
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const $ = (id) => document.getElementById(id);
 const START = { cx: -0.6, cy: 0.0, span: 3.4 };   // span = width of the view in the complex plane
 let view = { ...START };
 let width = 1600, height = 1000, maxIter = 400;
-let gpu = null, kernel = null, busy = false, pending = false;
+let K = null, hasGpu = false, busy = false, pending = false;
 
 // Classic deep-blue -> white -> gold gradient, cycled by iteration count.
 const STOPS = [[0, 0, 7, 100], [0.16, 32, 107, 203], [0.42, 237, 255, 255], [0.6425, 255, 170, 0], [0.8575, 0, 2, 0], [1, 0, 7, 100]];
@@ -162,29 +165,9 @@ function draw(iters) {
   ctx.putImageData(img, 0, 0);
 }
 
-function params() {
-  const scale = view.span / width;
-  return { size: width * height, scalars: { width, height, maxIter, centerX: view.cx, centerY: view.cy, scale } };
-}
-
-// Same algorithm as the Kotlin kernel, for the CPU side of the race.
-function cpuMandelbrot({ size, scalars: s }) {
-  const out = new Int32Array(size);
-  for (let id = 0; id < size; id++) {
-    const x0 = s.centerX + ((id % s.width) - (s.width >> 1)) * s.scale;
-    const y0 = s.centerY + (Math.trunc(id / s.width) - (s.height >> 1)) * s.scale;
-    let x = 0, y = 0, iter = 0;
-    while (x * x + y * y <= 4 && iter < s.maxIter) {
-      const xt = x * x - y * y + x0;
-      y = 2 * x * y + y0;
-      x = xt;
-      iter++;
-    }
-    out[id] = iter;
-  }
-  return out;
-}
-
+const args = () => [width, height, maxIter, view.cx, view.cy, view.span / width];
+const gpuFrame = () => K.gpuMandelbrot(...args());   // Kotlin: GpuKernel.run(...)
+const cpuFrame = () => K.cpuMandelbrot(...args());   // Kotlin: KernelinCpu.dispatch { mandelbrotView(...) }
 const fmt = (ms) => ms >= 1000 ? (ms / 1000).toFixed(2) + ' s' : ms.toFixed(ms < 10 ? 1 : 0) + ' ms';
 
 function updateInfo() {
@@ -197,20 +180,19 @@ function updateInfo() {
 }
 
 async function render() {
+  if (!K) return;
   if (busy) { pending = true; return; }
   busy = true;
   try {
     updateInfo();
-    const p = params();
-    if (kernel) {
-      const { outputs, ms } = await kernel.run({ ...p, buffers: { out: p.size } });
-      $('gpuMs').textContent = fmt(ms);
-      draw(outputs.out);
+    if (hasGpu) {
+      const r = await gpuFrame();
+      $('gpuMs').textContent = fmt(r.ms);
+      draw(r.data);
     } else {
-      const t0 = performance.now();
-      const out = cpuMandelbrot(p);
-      $('cpuMs').textContent = fmt(performance.now() - t0);
-      draw(out);
+      const r = cpuFrame();
+      $('cpuMs').textContent = fmt(r.ms);
+      draw(r.data);
     }
   } catch (e) {
     $('badge').textContent = 'error: ' + e.message;
@@ -222,18 +204,15 @@ async function render() {
 }
 
 async function race() {
-  if (!kernel) return;
+  if (!hasGpu) return;
   $('race').disabled = true;
   $('cpuMs').textContent = 'running...';
   $('speedup').textContent = '–';
   await new Promise((r) => setTimeout(r, 30));
-  const p = params();
   const gpuRuns = [];
-  for (let i = 0; i < 5; i++) gpuRuns.push((await kernel.run({ ...p, buffers: { out: p.size } })).ms);
+  for (let i = 0; i < 5; i++) gpuRuns.push((await gpuFrame()).ms);
   const gpuMs = gpuRuns.sort((a, b) => a - b)[2];
-  const t0 = performance.now();
-  cpuMandelbrot(p);
-  const cpuMs = performance.now() - t0;
+  const cpuMs = cpuFrame().ms;
   $('gpuMs').textContent = fmt(gpuMs);
   $('cpuMs').textContent = fmt(cpuMs);
   $('speedup').textContent = Math.round(cpuMs / gpuMs) + '×';
@@ -264,15 +243,9 @@ $('res').addEventListener('change', () => {
 $('reset').addEventListener('click', () => { view = { ...START }; render(); });
 $('race').addEventListener('click', race);
 
-// Code tabs: the Kotlin is read from the real source file, the WGSL is the generated file.
+// Code tabs: the Kotlin is read from the real source file; the WGSL comes from inside the Wasm binary,
+// where the compiler plugin embedded it in place of kernelSource(::mandelbrotView).
 const sources = {};
-async function loadSources() {
-  const kt = await fetch('kernels/Kernels.kt').then((r) => r.text());
-  const start = kt.indexOf('@Kernel\nfun mandelbrotView');
-  sources.kotlin = start >= 0 ? kt.slice(start, kt.indexOf('\n}\n', start) + 2) : kt;
-  sources.wgsl = kernel ? kernel.code : await fetch(KERNEL + '.wgsl').then((r) => r.text());
-  $('code').textContent = sources.kotlin;
-}
 document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
   $('code').textContent = sources[b.dataset.tab] || '';
@@ -281,18 +254,31 @@ document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('cli
 (async () => {
   buildPalette(maxIter);
   try {
-    gpu = await KernelinGpu.create();
-    kernel = await gpu.load(KERNEL);
-    $('badge').textContent = 'GPU · ' + (gpu.info || 'WebGPU');
-    $('gpuInfo').textContent = gpu.info || 'WebGPU';
+    K = await import('./wasm/kernelin-demo.mjs');
+  } catch (e) {
+    console.error(e);
+    $('nogpu').classList.remove('hidden');
+    $('nogpu').querySelector('div').innerHTML = '<b>This browser can\'t run Kotlin/Wasm</b> (it needs WebAssembly GC). Try a recent Chrome, Edge, Firefox or Safari.';
+    $('badge').textContent = 'not supported';
+    return;
+  }
+  try {
+    const desc = await K.kernelinInit();
+    hasGpu = true;
+    $('badge').textContent = 'GPU · ' + desc;
+    $('gpuInfo').textContent = desc;
   } catch (e) {
     console.warn(e);
     $('nogpu').classList.remove('hidden');
-    $('badge').textContent = 'CPU only';
+    $('badge').textContent = 'CPU only (Kotlin/Wasm)';
     $('race').disabled = true;
     $('gpuInfo').textContent = 'not available';
   }
-  await loadSources();
+  sources.wgsl = K.kernelinWgsl();
+  const kt = await fetch('kernels/Kernels.kt').then((r) => r.text());
+  const at = kt.indexOf('@Kernel\nfun mandelbrotView');
+  sources.kotlin = at >= 0 ? kt.slice(at, kt.indexOf('\n}\n', at) + 2) : kt;
+  $('code').textContent = sources.kotlin;
   await render();
 })();
 </script>

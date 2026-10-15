@@ -127,10 +127,10 @@
 
   <dl class="props">
     <dt>Status</dt><dd><span class="tag good">MVP core working</span> <span class="tag blue">Kotlin → GPU verified on real hardware</span></dd>
-    <dt>Phase</dt><dd>Step 0 ✓ · <b>MVP</b> (≈80% done) · v1.0 next</dd>
+    <dt>Phase</dt><dd>Step 0 ✓ · <b>MVP</b> (≈90% done) · v1.0 next</dd>
     <dt>Last updated</dt><dd>2026-10-15</dd>
-    <dt>Tests</dt><dd><span class="tag good">17 / 17 passing</span> · every generated shader validated by naga</dd>
-    <dt>Stack</dt><dd>Kotlin 2.4.21 (K2) · JDK 21 · Gradle 9.6 · WebGPU</dd>
+    <dt>Tests</dt><dd><span class="tag good">21 / 21 passing</span> · every generated shader validated by naga</dd>
+    <dt>Stack</dt><dd>Kotlin 2.4.21 (K2) · Kotlin Multiplatform (JVM + Wasm) · JDK 21 · Gradle 9.6 · WebGPU</dd>
     <dt>Tested on</dt><dd>Apple M5 (10 CPU cores, 8-core GPU, Metal) · WebGPU in Chromium 152</dd>
     <dt>Live demo</dt><dd><a href="demo/"><b>Try it in your browser →</b></a> zoom a fractal computed on your GPU from plain Kotlin</dd>
     <dt>Repository</dt><dd><a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a></dd>
@@ -174,6 +174,11 @@
   </table>
   </div>
 
+  <div class="callout">
+    <div class="ci">🌐</div>
+    <div><p><b>Live demo race (all Kotlin, in the browser):</b> 1600 × 1000 Mandelbrot, 400 iterations. GPU via the Kotlin WebGPU host: <b>10 ms</b>. The same Kotlin kernel compiled to Wasm on 1 CPU core: <b>672 ms</b>. That's <b>67× faster</b>, with 99.75% identical pixels. <a href="demo/">Try it yourself →</a></p></div>
+  </div>
+
   <details>
     <summary>How this was measured, and what the numbers mean</summary>
     <div class="inner">
@@ -198,12 +203,21 @@
     <span class="n">K2 compiler (FIR)</span><span class="a">→</span>
     <span class="n">Kotlin IR</span><span class="a">→</span>
     <span class="n hi">Kernelin plugin: IR → WGSL</span><span class="a">→</span>
-    <span class="n">.wgsl + .json inside the jar</span><span class="a">→</span>
+    <span class="n">WGSL embedded via <code>kernelSource(::k)</code></span><span class="a">→</span>
+    <span class="n">Kotlin WebGPU host (Wasm)</span><span class="a">→</span>
     <span class="n">WebGPU</span><span class="a">→</span>
     <span class="n">Metal / Vulkan / DX12</span><span class="a">→</span>
     <span class="n">GPU</span>
   </div>
   <p>The plugin reads the Kotlin IR right after type checking, before any JVM lowering, so loops, <code>&amp;&amp;</code>, <code>++</code> and <code>+=</code> still have their original shape. Arrays become GPU storage buffers, <code>Int</code>/<code>Float</code> parameters go into a uniform struct, and <code>globalId()</code> becomes the GPU thread index. Unsupported code becomes a normal compiler error with file and line.</p>
+  <p><b>Getting the shader into your program:</b> call <code>kernelSource(::myKernel)</code>. The plugin replaces that call at compile time with the generated WGSL and its parameter layout, so it works the same on the JVM and in WebAssembly, with no files or reflection. The Kotlin host then runs it:</p>
+<pre><code>val gpu = WebGpu.create()                                   // kernelin-webgpu (Kotlin/Wasm)
+val kernel = gpu.load(kernelSource(::mandelbrotView))       // shader embedded by the compiler
+val result = kernel.run(
+    size = width * height,
+    scalars = mapOf("width" to width, "height" to height, "maxIter" to 400, ...),
+    buffers = mapOf("out" to GpuData.empty(width * height)),
+)</code></pre>
 
   <div class="cols">
     <div>
@@ -270,7 +284,7 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
       <tr><td><b>Functions</b></td><td>your own top-level helpers and extension functions with Int/Float/Boolean params (become WGSL <code>fn</code>s)</td><td>passing arrays to helpers, default args, generics</td></tr>
       <tr><td><b>GPU features</b></td><td><code>globalId()</code> (1D, scales past 4M threads via 2D dispatch), <code>array.size</code></td><td>2D/3D ids, shared (workgroup) memory, barriers, atomics</td></tr>
       <tr><td><b>Safety</b></td><td>compiler errors with file:line for strings, Double, Long, lambdas, recursion, exceptions, casts, nullable types, library calls; WGSL keyword clashes auto-renamed</td><td>IDE red underlines while typing (needs FIR checkers)</td></tr>
-      <tr><td><b>Running</b></td><td>CPU: <code>KernelinCpu.dispatch</code> / <code>dispatchParallel</code>. GPU: WebGPU host <code>kernelin-web.js</code> (browser) and the benchmark runner</td><td>Kotlin-side GPU API (<code>kernel.runOnGpu()</code>), Android, JVM desktop, Kotlin/Wasm</td></tr>
+      <tr><td><b>Running</b></td><td>CPU: <code>KernelinCpu.dispatch</code> / <code>dispatchParallel</code>. GPU from Kotlin: <code>kernelSource(::k)</code> + <code>WebGpu</code> / <code>GpuKernel.run()</code> on Kotlin/Wasm in any WebGPU browser. Kernels compile to JVM and Wasm from one <code>commonMain</code>.</td><td>GPU from the JVM (desktop, needs wgpu), Android native, iOS, typed <code>kernel.run(a, b)</code> API</td></tr>
     </tbody>
   </table>
   </div>
@@ -293,9 +307,10 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
     <li class="done"><span class="box">✓</span><span class="t">Runs on a real GPU (M5 via WebGPU) with results matching the CPU</span></li>
     <li class="done"><span class="box">✓</span><span class="t">Benchmarks: 5 kernels, CPU vs GPU</span></li>
     <li class="done"><span class="box">✓</span><span class="t">Live demo page on GitHub Pages: zoomable Mandelbrot, CPU vs GPU race, Kotlin and WGSL side by side</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Reusable WebGPU host (<code>kernelin-web.js</code>) that runs any kernel from its .wgsl + .json</span></li>
-    <li class="doing"><span class="box"></span><span class="t">Kotlin-side GPU host (no hand-written JS): Kotlin/Wasm or JVM + wgpu</span></li>
-    <li><span class="box"></span><span class="t">Gradle plugin wired for outside projects</span></li>
+    <li class="done"><span class="box">✓</span><span class="t"><code>kernelSource(::kernel)</code>: the compiler embeds the shader in your program</span></li>
+    <li class="done"><span class="box">✓</span><span class="t">Runtime and samples are Kotlin Multiplatform: same kernels compile to JVM and Wasm</span></li>
+    <li class="done"><span class="box">✓</span><span class="t">Kotlin GPU host (<code>kernelin-webgpu</code>, Kotlin/Wasm). The demo now runs on it, and its CPU side is the real Kotlin kernel.</span></li>
+    <li class="doing"><span class="box"></span><span class="t">Gradle plugin wired for outside projects</span></li>
     <li class="done"><span class="box">✓</span><span class="t">README, push to GitHub</span></li>
     <li><span class="box"></span><span class="t">Demo video</span></li>
   </ul>
@@ -311,10 +326,10 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
   <!-- ============================================================ NEXT -->
   <h2>⏭️ Next plan (short)</h2>
   <ol>
-    <li><b>Kotlin-side GPU host:</b> run kernels from Kotlin code instead of JavaScript (Kotlin/Wasm + WebGPU first). Then the CPU side of the demo race can be real Kotlin too.</li>
-    <li><b>Wire the Gradle plugin</b> so any project can use one line: <code>id("io.github.kernelin")</code>.</li>
-    <li><b>Android test</b> on your Motorola phone (Chrome WebGPU first, then AndroidX WebGPU).</li>
+    <li><b>Wire the Gradle plugin</b> so any project can use one line: <code>id("io.github.kernelin")</code>, for JVM and Multiplatform.</li>
+    <li><b>Android test</b> on your Motorola phone (the live demo in Chrome first, then AndroidX WebGPU natively).</li>
     <li><b>FIR checkers</b> so errors show up in the IDE while typing, not only on build.</li>
+    <li><b>Faster Kotlin CPU path:</b> remove the per-element lambda and <code>globalId()</code> overhead, so CPU baselines are fairer.</li>
   </ol>
 
   <!-- ============================================================ PROJECT -->
@@ -323,14 +338,18 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
     <summary>Structure</summary>
     <div class="inner">
 <pre><code>kernelin/
-├── kernelin-runtime/          @Kernel, globalId(), KernelinCpu, KernelinShaders
-├── kernelin-compiler-plugin/  K2 plugin: finds @Kernel, translates IR → WGSL
+├── kernelin-runtime/          (JVM + Wasm) @Kernel, globalId(), KernelinCpu, kernelSource(), KernelManifest
+├── kernelin-compiler-plugin/  K2 plugin: IR → WGSL, and replaces kernelSource(::k) with the shader
 │   └── WgslKernelTranslator.kt   the core translator (~900 lines)
+├── kernelin-webgpu/           (Wasm) Kotlin WebGPU host: WebGpu, GpuKernel.run(), GpuData
 ├── kernelin-gradle-plugin/    future one-line setup for users (scaffolded)
-├── samples/                   5 example kernels, CPU tests, benchmark
-│   └── web/runner.html        WebGPU runner: runs shaders, checks + times them
+├── samples/
+│   ├── src/commonMain/        6 example kernels (compiled to JVM, Wasm and WGSL)
+│   ├── src/jvmMain/           CPU benchmark   ·  src/jvmTest/  CPU tests
+│   ├── src/wasmJsMain/        Demo.kt: functions the live demo calls
+│   └── web/runner.html        benchmark runner: runs shaders, checks + times them
 ├── benchmarks/                saved benchmark results
-├── docs/demo/                 live demo (GitHub Pages) + kernelin-web.js host
+├── docs/demo/                 live demo (GitHub Pages): page + Kotlin/Wasm build (wasm/)
 └── docs/index.html            this page (project report)</code></pre>
     </div>
   </details>
@@ -344,7 +363,7 @@ gradle build
 gradle :samples:bench -Pout=&lt;folder&gt;
 # then serve &lt;folder&gt; over http and open runner.html in a WebGPU browser
 
-# refresh the live demo's shader after changing mandelbrotView
+# rebuild the Kotlin/Wasm demo (optimized, ~100 KB) into docs/demo after changing kernels
 gradle :samples:exportDemo
 
 # generated shaders land here
@@ -371,6 +390,8 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
         <li>Integer divide by zero: Kotlin throws, WGSL returns a defined value.</li>
         <li>Gradle wrapper download timed out here, so the installed Gradle 9.6 is used (<code>gradle</code>, not <code>./gradlew</code>).</li>
         <li>Deleting a kernel can leave its old <code>.wgsl</code> in the build folder until a clean build.</li>
+        <li>The Kotlin/Wasm CPU path is slower than plain JavaScript for this loop (672 ms vs 291 ms): each pixel goes through a lambda and a <code>globalId()</code> lookup. On the GPU this costs nothing; on the CPU it's planned work.</li>
+        <li>Kotlin/Wasm arrays live outside JavaScript memory, so uploading a Kotlin <code>IntArray</code>/<code>FloatArray</code> copies element by element. GPU outputs stay as JS typed arrays (no copy) unless you ask for <code>ints()</code>/<code>floats()</code>.</li>
       </ul>
     </div>
   </details>
@@ -386,6 +407,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
     <div class="row"><span>Oct 15</span><span>First commit <code>69175e6</code> on <code>main</code> (34 files), pushed to <a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a>.</span></div>
     <div class="row"><span>Oct 15</span><span>Project report published on GitHub Pages: <a href="https://rajumark.github.io/kernelin/">rajumark.github.io/kernelin</a>.</span></div>
     <div class="row"><span>Oct 15</span><span><b>Live demo</b> added: new <code>mandelbrotView</code> kernel with Float zoom inputs (shader valid first try), reusable WebGPU host, CPU vs GPU race. On the M5: 1.6 M pixels in 7.8 ms on the GPU vs 291 ms in JavaScript on 1 core (37×). Works on phone screens too.</span></div>
+    <div class="row"><span>Oct 15</span><span><b>Kotlin/Wasm GPU host.</b> New <code>kernelSource(::k)</code> compiler feature embeds the shader in the program. Runtime and samples became Kotlin Multiplatform (JVM + Wasm). New <code>kernelin-webgpu</code> module drives WebGPU from Kotlin. The live demo now runs on it (100 KB Wasm), and the race is Kotlin vs Kotlin: GPU 10 ms vs Kotlin/Wasm CPU 672 ms (67×), 99.75% identical pixels. 21 tests passing.</span></div>
   </div>
 
   <p class="footer">Kernelin · report updated 2026-10-15</p>

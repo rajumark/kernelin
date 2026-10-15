@@ -124,6 +124,32 @@ class WgslTranslationTest {
         assertTrue(c.wgslFiles().isEmpty())
     }
 
+    @Test
+    fun `kernelSource is replaced by the generated shader at compile time`() {
+        val c = compileOk(
+            """
+            @Kernel
+            fun fill(out: FloatArray, value: Float) {
+                out[globalId()] = value
+            }
+
+            fun source(): KernelSource = kernelSource(::fill)
+            """,
+        )
+        val source = c.loadClass("KernelsKt").getMethod("source").invoke(null) as io.github.kernelin.KernelSource
+        assertEquals("fill", source.name)
+        assertEquals(c.wgsl("fill"), source.wgsl)
+        assertContains(source.wgsl, "out[i32(kernelin_id)] = kernelin_params.value;")
+        assertEquals(listOf("out", "value"), source.manifest.params.map { it.name })
+        assertEquals(16, source.manifest.uniformBytes)
+    }
+
+    @Test
+    fun `kernelSource rejects functions that are not kernels`() {
+        val c = compileError("fun plain(x: Int) = x\nfun source() = kernelSource(::plain)")
+        assertContains(c.errors.joinToString("\n"), "'plain' isn't annotated with @Kernel")
+    }
+
     // ------------------------------------------------------------------ errors
 
     private fun compileError(source: String): Compilation {

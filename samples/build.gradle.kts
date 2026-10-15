@@ -1,51 +1,77 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+
 plugins {
-    alias(libs.plugins.kotlin.jvm)
-    application
+    alias(libs.plugins.kotlin.multiplatform)
 }
 
 kotlin {
     jvmToolchain(21)
+    jvm()
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        outputModuleName.set("kernelin-demo")
+        browser {
+            testTask { enabled = false }
+        }
+        binaries.executable()
+    }
+
+    sourceSets {
+        // The kernels live in commonMain, so the same Kotlin compiles to the JVM, to Wasm and (via Kernelin) to WGSL.
+        commonMain.dependencies {
+            implementation(project(":kernelin-runtime"))
+        }
+        wasmJsMain.dependencies {
+            implementation(project(":kernelin-webgpu"))
+        }
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(project.dependencies.platform(libs.junit.bom))
+            runtimeOnly(libs.junit.platform.launcher)
+        }
+    }
 }
 
 dependencies {
-    implementation(project(":kernelin-runtime"))
     // Inside this repo the compiler plugin is wired directly; users will apply the Gradle plugin instead.
     kotlinCompilerPluginClasspath(project(":kernelin-compiler-plugin"))
-
-    testImplementation(kotlin("test"))
-    testImplementation(platform(libs.junit.bom))
-    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
-application {
-    mainClass.set("io.github.kernelin.samples.BenchmarkKt")
-    applicationDefaultJvmArgs = listOf("-Xmx6g")
-}
-
-tasks.test {
+tasks.withType<Test> {
     useJUnitPlatform()
 }
 
-// Copies the shader Kernelin generated for the live demo (and its Kotlin source) into docs/demo,
-// which GitHub Pages serves. Run after changing mandelbrotView: gradle :samples:exportDemo
-tasks.register<Copy>("exportDemo") {
-    group = "kernelin"
-    description = "Exports the generated demo shader to docs/demo/kernels."
-    dependsOn(tasks.named("compileKotlin"))
-    from(layout.buildDirectory.dir("classes/kotlin/main/kernelin")) {
-        include("io.github.kernelin.samples.mandelbrotView.*")
-    }
-    from("src/main/kotlin/io/github/kernelin/samples/Kernels.kt")
-    into(rootProject.layout.projectDirectory.dir("docs/demo/kernels"))
-}
+val jvmMain = kotlin.jvm().compilations["main"]
 
-// ./gradlew :samples:bench -Pout=<dir> writes inputs, expected outputs, shaders and CPU timings for the GPU runner.
+// gradle :samples:bench -Pout=<dir> writes inputs, expected outputs, shaders and CPU timings for the GPU runner.
 tasks.register<JavaExec>("bench") {
     group = "kernelin"
     description = "Runs the CPU benchmarks and exports data for the WebGPU runner."
-    classpath = sourceSets["main"].runtimeClasspath
+    dependsOn(jvmMain.compileTaskProvider)
+    classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
     mainClass.set("io.github.kernelin.samples.BenchmarkKt")
     maxHeapSize = "6g"
     val out = providers.gradleProperty("out").orElse(layout.buildDirectory.dir("kernelin-bench").map { it.asFile.path })
     argumentProviders.add(CommandLineArgumentProvider { listOf(out.get()) })
+}
+
+// Builds the Kotlin/Wasm demo and copies it, plus the generated shader and the kernel source,
+// into docs/demo, which GitHub Pages serves. Run after changing the kernels: gradle :samples:exportDemo
+tasks.register<Copy>("exportDemo") {
+    group = "kernelin"
+    description = "Exports the Kotlin/Wasm demo and its generated shader to docs/demo."
+    val wasmDist = tasks.named("compileProductionExecutableKotlinWasmJsOptimize")
+    dependsOn(wasmDist, jvmMain.compileTaskProvider)
+    into(rootProject.layout.projectDirectory.dir("docs/demo"))
+    from(layout.buildDirectory.dir("compileSync/wasmJs/main/productionExecutable/optimized")) {
+        include("*.mjs", "*.wasm")
+        into("wasm")
+    }
+    from(layout.buildDirectory.dir("classes/kotlin/jvm/main/kernelin")) {
+        include("io.github.kernelin.samples.mandelbrotView.*")
+        into("kernels")
+    }
+    from("src/commonMain/kotlin/io/github/kernelin/samples/Kernels.kt") {
+        into("kernels")
+    }
 }
