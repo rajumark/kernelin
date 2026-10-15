@@ -110,7 +110,33 @@
   .log .row span:first-child { color: var(--muted); font-variant-numeric: tabular-nums; }
   .footer { color: var(--muted); font-size: 12px; margin-top: 40px; }
 
+  /* tabs */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 6px 0 4px; }
+  .tabs a { text-decoration: none; padding: 7px 12px 8px; font-size: 14px; font-weight: 500; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 4px 4px 0 0; }
+  .tabs a:hover { background: var(--surface); }
+  .tabs a[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+  .panel[hidden] { display: none; }
+
+  /* goal tab */
+  .mission { border: 1px solid var(--line-2); border-left: 4px solid var(--accent); border-radius: 6px; padding: 14px 16px; margin: 18px 0 8px; }
+  .mission .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .mission .v { font-size: 19px; font-weight: 650; line-height: 1.35; margin: 4px 0 6px; }
+  .mission p { margin: 0; color: var(--ink-2); }
+  .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 8px 0 12px; }
+  .card { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; min-width: 0; }
+  .card h4 { margin: 0 0 4px; font-size: 13.5px; font-weight: 650; }
+  .card p, .card ul { margin: 0; font-size: 13px; color: var(--ink-2); }
+  .card ul { padding-left: 16px; }
+  .ms-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+  .ms-head h2 { flex: 1 1 auto; }
+  .exit { background: var(--surface); border-radius: 6px; padding: 10px 14px; margin: 8px 0 4px; font-size: 13px; }
+  .exit b { display: block; margin-bottom: 2px; }
+  .exit ul { margin: 0; padding-left: 18px; }
+  td.area { white-space: nowrap; font-weight: 600; }
+
   @media (max-width: 680px) {
+    .cards { grid-template-columns: 1fr; }
+    td.area { white-space: normal; }
     .tiles { grid-template-columns: repeat(2, 1fr); }
     .cols { grid-template-columns: 1fr; }
     .props { grid-template-columns: 110px 1fr; }
@@ -125,6 +151,12 @@
   <h1>Kernelin</h1>
   <p class="subtitle">Write GPU kernels in plain Kotlin. A K2 compiler plugin turns them into WebGPU (WGSL) code that runs on any GPU.</p>
 
+  <nav class="tabs" role="tablist">
+    <a href="#report" role="tab" id="t-report" aria-controls="tab-report" aria-selected="true">📊 Report</a>
+    <a href="#goal" role="tab" id="t-goal" aria-controls="tab-goal" aria-selected="false">🎯 Goal</a>
+  </nav>
+
+  <div class="panel" id="tab-report" role="tabpanel" aria-labelledby="t-report">
   <dl class="props">
     <dt>Status</dt><dd><span class="tag good">MVP core working</span> <span class="tag blue">Kotlin → GPU verified on real hardware</span></dd>
     <dt>Phase</dt><dd>Step 0 ✓ · <b>MVP</b> (≈95% done, only the demo video left) · v1.0 next</dd>
@@ -329,6 +361,7 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
     <li><span class="box"></span><span class="t">Simple API: <code>blur.runOnGpu(input, output)</code></span></li>
     <li><span class="box"></span><span class="t">Publish to Maven Central, docs site, blog post, Kotlin Slack, KotlinConf talk proposal</span></li>
   </ul>
+  <p style="color:var(--ink-2);font-size:13px">Version 2 and 3, the mission and the long-term vision are on the <a href="#goal">🎯 Goal</a> tab.</p>
 
   <!-- ============================================================ NEXT -->
   <h2>⏭️ Next plan (short)</h2>
@@ -428,6 +461,242 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
     <div class="row"><span>Oct 15</span><span><b>Usable by other projects.</b> Gradle plugin <code>id("io.github.rajumark.kernelin")</code> works for JVM and Multiplatform. Two example projects verified: JVM prints the generated shader; Multiplatform ran the same kernel on the JVM (all cores) and on the M5 GPU from Kotlin/Wasm. Maven publishing + Apache 2.0 license. GitHub Actions CI added.</span></div>
   </div>
 
+  </div><!-- /tab-report -->
+
+  <!-- ============================================================ GOAL TAB -->
+  <div class="panel" id="tab-goal" role="tabpanel" aria-labelledby="t-goal" hidden>
+
+  <div class="mission">
+    <div class="k">Our one mission</div>
+    <div class="v">Make the GPU a normal Kotlin target: write a plain Kotlin function, test it on the CPU, run it on any GPU, and get the same answer.</div>
+    <p>Every feature must pass one test: <b>does it help a Kotlin developer run their own plain Kotlin code on a GPU, safely and fast?</b> If not, it waits.</p>
+  </div>
+
+  <!-- ------------------------------------------------ GOAL -->
+  <h2>🎯 Goal</h2>
+  <p>Kernelin becomes the <b>trusted, default way to use the GPU from Kotlin</b>, on every platform Kotlin runs on, good enough that companies ship it in production and JetBrains is happy to point people to it.</p>
+  <div class="cards">
+    <div class="card"><h4>1 · Plain Kotlin, no new language</h4><p>Kernels are normal Kotlin functions. No DSL, no WGSL strings, no annotations beyond <code>@Kernel</code>. If it compiles and the IDE shows no error, it runs on the GPU.</p></div>
+    <div class="card"><h4>2 · Same answer on CPU and GPU</h4><p>CPU and GPU results match, or differ only in documented, tested ways (float rounding). No silent wrong answers, ever.</p></div>
+    <div class="card"><h4>3 · Runs everywhere Kotlin runs</h4><p>One kernel, unchanged, on browser (Wasm), desktop JVM, Android and iOS, on Apple, NVIDIA, AMD, Intel, Qualcomm and ARM GPUs.</p></div>
+    <div class="card"><h4>4 · Fast enough to matter</h4><p>Generated code within ~20% of a hand-written shader on standard benchmarks, and data stays on the GPU between kernels so real apps actually get the speedup.</p></div>
+  </div>
+  <h3>How we measure it (north-star numbers)</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Metric</th><th class="num">Today (0.1)</th><th class="num">v2 target</th><th class="num">v3 target</th></tr></thead>
+    <tbody>
+      <tr><td>Platforms where a kernel runs on the GPU</td><td class="num">1 (browser)</td><td class="num">4</td><td class="num">4 + server</td></tr>
+      <tr><td>GPU vendors tested in CI</td><td class="num">1 (Apple)</td><td class="num">4</td><td class="num">6</td></tr>
+      <tr><td>Kotlin versions supported</td><td class="num">1 (2.4.21)</td><td class="num">latest 3</td><td class="num">latest 3, new ones in ≤ 2 weeks</td></tr>
+      <tr><td>Speed vs hand-written WGSL</td><td class="num">not measured</td><td class="num">≥ 70%</td><td class="num">≥ 80–90%</td></tr>
+      <tr><td>Known CPU/GPU mismatches (beyond float tolerance)</td><td class="num">0 known, not fuzzed</td><td class="num">0, fuzzed</td><td class="num">0, fuzzed daily</td></tr>
+      <tr><td>Projects using it outside this repo</td><td class="num">0</td><td class="num">3+</td><td class="num">25+ incl. production apps</td></tr>
+      <tr><td>Maintainers</td><td class="num">1</td><td class="num">2+</td><td class="num">3+ from different companies</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <!-- ------------------------------------------------ VISION -->
+  <h2>🔭 Vision</h2>
+  <p><b>"Kotlin everywhere" should include the GPU.</b> Today, Kotlin developers who need GPU speed must leave Kotlin: write WGSL, GLSL, Metal or CUDA by hand, or move the work to Python. We want a world where speeding up a loop on the GPU is as normal as moving it to a coroutine: change one annotation, keep your tests, ship.</p>
+  <p>In 3 years, a Kotlin developer should be able to:</p>
+  <ul>
+    <li>Apply an image filter in a Compose Multiplatform app on Android, iOS, desktop and web with <b>one</b> shared kernel.</li>
+    <li>Run physics, simulations or signal processing in a KMP library without a single line of shader code.</li>
+    <li>Do data and AI pre-processing on a server GPU from a Ktor app or a Kotlin Notebook, without Python.</li>
+    <li>See GPU mistakes as red underlines in IntelliJ IDEA while typing, and step through a kernel in the debugger on the CPU.</li>
+  </ul>
+
+  <h3>Thinking as JetBrains: why this helps Kotlin</h3>
+  <div class="cards">
+    <div class="card"><h4>Completes the Multiplatform story</h4><p>KMP shares business logic and Compose shares UI. Kernelin shares <b>compute</b>: heavy work written once, run on every device's GPU.</p></div>
+    <div class="card"><h4>A real reason to pick Kotlin/Wasm</h4><p>Kotlin/Wasm + WebGPU running near-native GPU code in the browser is a flagship demo that JavaScript and Python can't easily match.</p></div>
+    <div class="card"><h4>Kotlin for data and AI</h4><p>GPU access is the #1 thing Kotlin is missing against Python for numeric work. Kernelin can be the base layer for Kotlin Notebook, Multik and DataFrame users.</p></div>
+    <div class="card"><h4>Proof the K2 plugin API works</h4><p>A serious, well-tested K2 plugin outside JetBrains is a public showcase for the compiler plugin API, and gives JetBrains real feedback while they stabilize it.</p></div>
+    <div class="card"><h4>IntelliJ IDEA gets a unique feature</h4><p>"Show generated GPU code", GPU inspections and quick-fixes: tooling only a compiler-aware IDE can offer.</p></div>
+    <div class="card"><h4>Low cost to JetBrains</h4><p>Independent, Apache 2.0, follows Kotlin's own conventions. Easy to recommend, easy to adopt later.</p></div>
+  </div>
+  <h3>How we make it easy for JetBrains to support us</h3>
+  <ul>
+    <li><b>Follow Kotlin's rules:</b> Kotlin coding conventions, the Kotlin library authors' guidelines, Kotlin's binary compatibility rules, no "Kotlin" in our product name (trademark).</li>
+    <li><b>Never fork the compiler.</b> Only public plugin extension points; test against Kotlin dev builds and file clear YouTrack (KT) issues when the plugin API breaks.</li>
+    <li><b>Design in the open:</b> short design docs (KEEP style) for every big feature, so JetBrains engineers can review the direction early.</li>
+    <li><b>Be a good citizen:</b> show up on Kotlin Slack, give talks (KotlinConf, Kotlin Weekly), apply for the Kotlin Foundation ecosystem grants, and help other plugin authors.</li>
+  </ul>
+
+  <h3>What we will not do (to stay focused)</h3>
+  <ul>
+    <li>❌ Build a graphics or game engine (vertex/fragment shaders, render pipelines). We are <b>compute only</b>.</li>
+    <li>❌ Build a machine learning framework. Others can build one on top of Kernelin.</li>
+    <li>❌ Invent a DSL or a new language. If it's not plain Kotlin, it doesn't belong.</li>
+    <li>❌ Hide the GPU's cost. Copying data has a price; the API makes it visible.</li>
+    <li>❌ Add a new backend before the current one works on every platform.</li>
+  </ul>
+
+  <!-- ------------------------------------------------ GAPS -->
+  <h2>🧱 What's not supported yet</h2>
+  <p>An honest list of everything missing in 0.1.0, so we can plan instead of guess.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Area</th><th>Missing today</th><th>Planned</th></tr></thead>
+    <tbody>
+      <tr><td class="area">Types</td><td><code>Double</code>, <code>Long</code>, <code>UInt</code>, <code>Short</code>/<code>Byte</code>, 16-bit floats, <code>Boolean</code> kernel parameters, data classes / structs (<code>Vec2</code>, <code>Vec3</code>, matrices), value classes, 2D arrays, fixed-size local arrays, nullable types</td><td><span class="tag blue">v1–v2</span></td></tr>
+      <tr><td class="area">Language</td><td>lambdas and inline functions (<code>repeat { }</code>, <code>forEach { }</code>), generics, default arguments in helpers, passing arrays to helpers, labeled <code>break@outer</code>, <code>when</code> with <code>in</code> ranges, top-level constants and objects</td><td><span class="tag blue">v2</span></td></tr>
+      <tr><td class="area">GPU features</td><td>2D/3D thread ids, choosing workgroup size (fixed at 64), shared (workgroup) memory, barriers, atomics, subgroup operations, textures/images, random numbers, reductions (sum, max), prefix scan, sort</td><td><span class="tag blue">v1–v3</span></td></tr>
+      <tr><td class="area">Runtime</td><td>GPU from the JVM (desktop/server), Android native, iOS, Kotlin/Native; buffers that stay on the GPU between runs; chaining kernels without copying back; typed API (<code>saxpy.gpu(a, x, y)</code>); automatic CPU fallback when there is no GPU; GPU timing; "device lost" recovery</td><td><span class="tag blue">v1–v2</span></td></tr>
+      <tr><td class="area">Backends</td><td>only WGSL. No direct SPIR-V (Vulkan), MSL (Metal) or CUDA</td><td><span class="tag gray">v3</span></td></tr>
+      <tr><td class="area">Safety</td><td>no bounds checks on the GPU (out-of-range reads are clamped silently), divide-by-zero differs from Kotlin, no fuzzing of CPU vs GPU results, only tested on one GPU vendor</td><td><span class="tag blue">v2</span></td></tr>
+      <tr><td class="area">IDE &amp; tooling</td><td>errors only on build (no red underlines while typing), no IntelliJ plugin ("show generated WGSL", gutter icons), no kernel debugger, no profiler, stale <code>.wgsl</code> files after deleting a kernel, Gradle configuration cache not verified</td><td><span class="tag blue">v1–v2</span></td></tr>
+      <tr><td class="area">Compatibility</td><td>works with exactly one Kotlin version (2.4.21); no Kotlin version matrix in CI; no public API compatibility check</td><td><span class="tag blue">v2</span></td></tr>
+      <tr><td class="area">Distribution</td><td>0.1.0 prepared but <b>not yet on Maven Central</b> or the Gradle Plugin Portal; no API docs (Dokka), no docs site</td><td><span class="tag warn">v1</span></td></tr>
+      <tr><td class="area">Community</td><td>no CONTRIBUTING, Code of Conduct, SECURITY policy, issue templates or design docs; one maintainer</td><td><span class="tag blue">v1–v2</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <!-- ------------------------------------------------ INDUSTRY READY -->
+  <h2>🏭 Industry-ready checklist</h2>
+  <p>What a project needs before companies can bet their product on it. These are the standards we follow from v2 on.</p>
+  <details open>
+    <summary>Correctness &amp; safety</summary>
+    <div class="inner"><ul class="check">
+      <li><span class="box"></span><span class="t">Differential testing: every feature runs on CPU and GPU in CI and results are compared</span></li>
+      <li><span class="box"></span><span class="t">Fuzzing: a generator writes random valid kernels and checks CPU = GPU, daily</span></li>
+      <li><span class="box"></span><span class="t">Golden tests for generated WGSL; every shader validated by both naga and Tint (Chrome's compiler)</span></li>
+      <li><span class="box"></span><span class="t">Debug mode with bounds and divide-by-zero checks that report the Kotlin file and line</span></li>
+      <li><span class="box"></span><span class="t">A written "numeric semantics" page: float precision, overflow, NaN, rounding on every GPU</span></li>
+      <li><span class="box"></span><span class="t">Real-device test lab: Apple, NVIDIA, AMD, Intel, Qualcomm Adreno, ARM Mali</span></li>
+    </ul></div>
+  </details>
+  <details>
+    <summary>Compatibility &amp; stability</summary>
+    <div class="inner"><ul class="check">
+      <li><span class="box"></span><span class="t">Semantic versioning, a clear deprecation cycle, and a stable 1.x API</span></li>
+      <li><span class="box"></span><span class="t">Public API checked on every PR (Kotlin ABI validation / binary-compatibility-validator)</span></li>
+      <li><span class="box"></span><span class="t">CI matrix over the latest 3 Kotlin versions plus Kotlin dev builds; support new Kotlin releases within 2 weeks</span></li>
+      <li><span class="box"></span><span class="t">Works with Gradle configuration cache, build cache and incremental compilation</span></li>
+      <li><span class="box"></span><span class="t">Long-term support line for companies that can't upgrade every month</span></li>
+    </ul></div>
+  </details>
+  <details>
+    <summary>Performance</summary>
+    <div class="inner"><ul class="check">
+      <li><span class="box"></span><span class="t">Benchmark suite in CI with alerts when a change makes kernels slower</span></li>
+      <li><span class="box"></span><span class="t">Compared against hand-written WGSL (and CUDA on servers), published openly</span></li>
+      <li><span class="box"></span><span class="t">Budget for compile time: the plugin adds less than 5% to a build</span></li>
+      <li><span class="box"></span><span class="t">Data stays on the GPU; copies are explicit and measurable</span></li>
+    </ul></div>
+  </details>
+  <details>
+    <summary>Developer experience</summary>
+    <div class="inner"><ul class="check">
+      <li><span class="box"></span><span class="t">Red underlines and quick-fixes in IntelliJ IDEA and Android Studio (FIR checkers)</span></li>
+      <li><span class="box"></span><span class="t">Every error explains what to do instead, with a docs link</span></li>
+      <li><span class="box"></span><span class="t">Docs site: getting started in 5 minutes, guides, API reference (Dokka), cookbook</span></li>
+      <li><span class="box"></span><span class="t">Online playground: write a kernel, see the WGSL, run it on your GPU</span></li>
+      <li><span class="box"></span><span class="t">Project templates for Android, Compose Multiplatform, desktop and web</span></li>
+    </ul></div>
+  </details>
+  <details>
+    <summary>Release, security &amp; supply chain</summary>
+    <div class="inner"><ul class="check">
+      <li><span class="box"></span><span class="t">Automated, signed releases from CI only (no laptop releases), with build provenance</span></li>
+      <li><span class="box"></span><span class="t">Reproducible builds and an SBOM for every release</span></li>
+      <li><span class="box"></span><span class="t">SECURITY.md with a private way to report bugs; dependency scanning (Dependabot)</span></li>
+      <li><span class="box"></span><span class="t">The compiler plugin never touches the network and reads only the files it compiles</span></li>
+      <li><span class="box"></span><span class="t">Native GPU libraries (wgpu/Dawn) pinned, checksummed and updated on a schedule</span></li>
+    </ul></div>
+  </details>
+  <details>
+    <summary>Community &amp; governance</summary>
+    <div class="inner"><ul class="check">
+      <li><span class="box"></span><span class="t">CONTRIBUTING, Code of Conduct, issue and PR templates, "good first issue" labels</span></li>
+      <li><span class="box"></span><span class="t">Public roadmap (this page) and short design docs before big features</span></li>
+      <li><span class="box"></span><span class="t">Reply to new issues within 3 working days</span></li>
+      <li><span class="box"></span><span class="t">More than one maintainer, so the project survives any one person leaving</span></li>
+      <li><span class="box"></span><span class="t">Clear license (Apache 2.0) and DCO sign-off on contributions</span></li>
+    </ul></div>
+  </details>
+
+  <!-- ------------------------------------------------ V2 -->
+  <div class="ms-head"><h2>🚀 Version 2 milestone</h2><span class="tag blue">after v1.0</span></div>
+  <p><b>Theme: "Runs everywhere, safe by default."</b> v1.0 makes Kernelin usable (IDE errors, Vec types, 2D ids, Android, Maven Central). v2 makes it <b>trustworthy for real apps</b> on every Kotlin platform.</p>
+  <h3>Language</h3>
+  <ul class="check">
+    <li><span class="box"></span><span class="t">Data classes as GPU structs, including arrays of structs (<code>Array&lt;Particle&gt;</code>)</span></li>
+    <li><span class="box"></span><span class="t">Built-in <code>Vec2/3/4</code> and <code>Mat2/3/4</code> with operators</span></li>
+    <li><span class="box"></span><span class="t"><code>UInt</code>, <code>Short</code>, <code>Byte</code>, <code>Half</code> (f16), <code>Boolean</code> parameters, fixed-size local arrays</span></li>
+    <li><span class="box"></span><span class="t">Inline functions and lambdas (<code>repeat</code>, <code>forEach</code>), generics through inlining, default arguments, arrays passed to helpers</span></li>
+    <li><span class="box"></span><span class="t">Labeled break/continue, <code>when</code> with ranges, top-level <code>const val</code></span></li>
+  </ul>
+  <h3>GPU</h3>
+  <ul class="check">
+    <li><span class="box"></span><span class="t">Shared memory, barriers and atomics with safe Kotlin APIs</span></li>
+    <li><span class="box"></span><span class="t">Choose workgroup size per kernel (<code>@Kernel(workgroup = 256)</code>)</span></li>
+    <li><span class="box"></span><span class="t">Built-in reductions: <code>gpu.sum(x)</code>, <code>gpu.max(x)</code>, prefix scan</span></li>
+  </ul>
+  <h3>Runtime: one API on every platform</h3>
+  <ul class="check">
+    <li><span class="box"></span><span class="t">Desktop and server JVM through wgpu-native or Dawn (Java FFM)</span></li>
+    <li><span class="box"></span><span class="t">Android through AndroidX WebGPU; iOS and macOS through Kotlin/Native</span></li>
+    <li><span class="box"></span><span class="t">Typed calls generated by the compiler: <code>saxpy.gpu(alpha, x, y)</code></span></li>
+    <li><span class="box"></span><span class="t"><code>GpuBuffer</code> that stays on the GPU; chain kernels without copying back</span></li>
+    <li><span class="box"></span><span class="t">Automatic CPU fallback when no GPU is available; clean "device lost" recovery</span></li>
+  </ul>
+  <h3>Tooling &amp; quality</h3>
+  <ul class="check">
+    <li><span class="box"></span><span class="t">IntelliJ plugin: "Show generated WGSL", gutter icon on kernels, quick-fixes</span></li>
+    <li><span class="box"></span><span class="t">Debug mode with bounds checks pointing to the Kotlin line</span></li>
+    <li><span class="box"></span><span class="t">Fuzz testing, Kotlin version matrix, real devices from 4 GPU vendors in CI</span></li>
+    <li><span class="box"></span><span class="t">Docs site with API reference, playground, and Compose Multiplatform image-filter sample</span></li>
+  </ul>
+  <div class="exit">
+    <b>v2 is done when:</b>
+    <ul>
+      <li>The same kernel runs unchanged on browser, desktop JVM, Android and iOS.</li>
+      <li>Fuzzing finds no CPU/GPU mismatches beyond the documented float tolerance.</li>
+      <li>The 3 latest Kotlin versions are supported, and at least 3 outside projects use Kernelin.</li>
+    </ul>
+  </div>
+
+  <!-- ------------------------------------------------ V3 -->
+  <div class="ms-head"><h2>🌍 Version 3 milestone</h2><span class="tag gray">long term</span></div>
+  <p><b>Theme: "The standard GPU layer for Kotlin."</b> v3 is about scale: faster code, more hardware, and an ecosystem other libraries build on.</p>
+  <h3>Performance</h3>
+  <ul class="check">
+    <li><span class="box"></span><span class="t">Optimizer: kernel fusion (chain two kernels into one), memory coalescing hints, automatic tiling for shared memory</span></li>
+    <li><span class="box"></span><span class="t">Native backends next to WGSL: SPIR-V (Vulkan), MSL (Metal), and CUDA for NVIDIA servers</span></li>
+    <li><span class="box"></span><span class="t">Multi-GPU and async queues for servers; batching for many small jobs</span></li>
+  </ul>
+  <h3>Ecosystem</h3>
+  <ul class="check">
+    <li><span class="box"></span><span class="t">Ready-made libraries built on Kernelin: linear algebra (matrix multiply), image processing, FFT, sort</span></li>
+    <li><span class="box"></span><span class="t">Integrations: Compose Multiplatform effects, Kotlin Notebook, Multik / Kotlin DataFrame, Ktor</span></li>
+    <li><span class="box"></span><span class="t">Kernels published and shared as normal Maven libraries</span></li>
+  </ul>
+  <h3>Tooling</h3>
+  <ul class="check">
+    <li><span class="box"></span><span class="t">Kernel debugger: pick a GPU thread and step through it on the CPU in IntelliJ IDEA</span></li>
+    <li><span class="box"></span><span class="t">GPU profiler view: time per kernel, memory copies, occupancy hints</span></li>
+  </ul>
+  <h3>Project</h3>
+  <ul class="check">
+    <li><span class="box"></span><span class="t">Built on the stable K2 compiler plugin API once JetBrains releases it</span></li>
+    <li><span class="box"></span><span class="t">3+ maintainers from different companies, a design-doc process, LTS releases</span></li>
+    <li><span class="box"></span><span class="t">Recognized in the Kotlin ecosystem: KotlinConf talk, listed in official Kotlin docs or Kotlin Foundation programs</span></li>
+  </ul>
+  <div class="exit">
+    <b>v3 is done when:</b>
+    <ul>
+      <li>Kernelin code runs within 80–90% of hand-written shaders on standard benchmarks.</li>
+      <li>Production apps on Android, iOS and servers ship with Kernelin kernels.</li>
+      <li>Other open-source libraries depend on Kernelin as their GPU layer.</li>
+    </ul>
+  </div>
+
+  </div><!-- /tab-goal -->
+
   <p class="footer">Kernelin · report updated 2026-10-15</p>
 </div>
 
@@ -518,6 +787,18 @@ function drawChart() {
 }
 drawChart();
 let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawChart, 100); });
+
+// tabs: #report (default) and #goal, kept in the URL so links can open a tab
+function showTab() {
+  const name = location.hash === "#goal" ? "goal" : "report";
+  for (const t of ["report", "goal"]) {
+    document.getElementById("tab-" + t).hidden = t !== name;
+    document.getElementById("t-" + t).setAttribute("aria-selected", t === name);
+  }
+  if (name === "report") drawChart();
+}
+window.addEventListener("hashchange", () => { showTab(); window.scrollTo(0, 0); });
+showTab();
 </script>
 </body>
 </html>
