@@ -1,5 +1,9 @@
 # Kernelin
 
+[![CI](https://github.com/rajumark/kernelin/actions/workflows/ci.yml/badge.svg)](https://github.com/rajumark/kernelin/actions/workflows/ci.yml)
+[![Live demo](https://img.shields.io/badge/live%20demo-try%20it-2a78d6)](https://rajumark.github.io/kernelin/demo/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
 Write GPU kernels in plain Kotlin. A K2 compiler plugin translates `@Kernel` functions to WGSL,
 so they run on any GPU through WebGPU, and they still run on the CPU for unit tests.
 
@@ -28,6 +32,21 @@ up to 118× faster than all 10 CPU cores (see the [project report](https://rajum
 
 **[Live demo →](https://rajumark.github.io/kernelin/demo/)** a fractal computed on your GPU by Kernelin-generated code.
 
+## Use it in your project
+
+```kotlin
+// build.gradle.kts
+plugins {
+    kotlin("jvm") version "2.4.21"          // or kotlin("multiplatform")
+    id("io.github.kernelin")
+}
+```
+
+The plugin runs the Kernelin compiler plugin on every compilation and adds `kernelin-runtime`
+(plus `kernelin-webgpu` to `wasmJsMain` in Multiplatform projects). Not on Maven Central yet:
+see [`examples/`](examples) for projects that use it straight from this repository
+(`examples/hello-jvm`, `examples/hello-multiplatform`).
+
 ## Run a kernel on the GPU from Kotlin
 
 ```kotlin
@@ -48,7 +67,7 @@ val y2 = result.floats("y")
 | `kernelin-runtime` | Multiplatform (JVM + Wasm): `@Kernel`, `globalId()`, `KernelinCpu` (CPU runner), `kernelSource(::k)` |
 | `kernelin-compiler-plugin` | K2 compiler plugin; `WgslKernelTranslator` turns Kotlin IR into WGSL and embeds it where `kernelSource(::k)` is called |
 | `kernelin-webgpu` | Kotlin/Wasm WebGPU host: `WebGpu.create()`, `gpu.load(kernelSource(::k))`, `kernel.run(...)` |
-| `kernelin-gradle-plugin` | One-line setup for users (not wired yet) |
+| `kernelin-gradle-plugin` | `id("io.github.kernelin")`: one-line setup for JVM and Multiplatform projects |
 | `samples` | Kernels in `commonMain` (JVM + Wasm), CPU tests and benchmark (JVM), live demo entry points (Wasm) |
 
 ## Build

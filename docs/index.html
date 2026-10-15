@@ -127,12 +127,15 @@
 
   <dl class="props">
     <dt>Status</dt><dd><span class="tag good">MVP core working</span> <span class="tag blue">Kotlin → GPU verified on real hardware</span></dd>
-    <dt>Phase</dt><dd>Step 0 ✓ · <b>MVP</b> (≈90% done) · v1.0 next</dd>
+    <dt>Phase</dt><dd>Step 0 ✓ · <b>MVP</b> (≈95% done, only the demo video left) · v1.0 next</dd>
     <dt>Last updated</dt><dd>2026-10-15</dd>
     <dt>Tests</dt><dd><span class="tag good">21 / 21 passing</span> · every generated shader validated by naga</dd>
     <dt>Stack</dt><dd>Kotlin 2.4.21 (K2) · Kotlin Multiplatform (JVM + Wasm) · JDK 21 · Gradle 9.6 · WebGPU</dd>
     <dt>Tested on</dt><dd>Apple M5 (10 CPU cores, 8-core GPU, Metal) · WebGPU in Chromium 152</dd>
     <dt>Live demo</dt><dd><a href="demo/"><b>Try it in your browser →</b></a> zoom a fractal computed on your GPU from plain Kotlin</dd>
+    <dt>Use it</dt><dd><code>plugins { id("io.github.kernelin") }</code> · JVM and Multiplatform · see <a href="https://github.com/rajumark/kernelin/tree/main/examples">examples/</a></dd>
+    <dt>CI</dt><dd><a href="https://github.com/rajumark/kernelin/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/rajumark/kernelin/actions/workflows/ci.yml/badge.svg" style="vertical-align:middle;height:20px"></a> builds, tests and runs both examples on every push</dd>
+    <dt>License</dt><dd>Apache 2.0</dd>
     <dt>Repository</dt><dd><a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a></dd>
     <dt>Location</dt><dd><code>~/Documents/kotlin/kernelin</code></dd>
   </dl>
@@ -285,6 +288,7 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
       <tr><td><b>GPU features</b></td><td><code>globalId()</code> (1D, scales past 4M threads via 2D dispatch), <code>array.size</code></td><td>2D/3D ids, shared (workgroup) memory, barriers, atomics</td></tr>
       <tr><td><b>Safety</b></td><td>compiler errors with file:line for strings, Double, Long, lambdas, recursion, exceptions, casts, nullable types, library calls; WGSL keyword clashes auto-renamed</td><td>IDE red underlines while typing (needs FIR checkers)</td></tr>
       <tr><td><b>Running</b></td><td>CPU: <code>KernelinCpu.dispatch</code> / <code>dispatchParallel</code>. GPU from Kotlin: <code>kernelSource(::k)</code> + <code>WebGpu</code> / <code>GpuKernel.run()</code> on Kotlin/Wasm in any WebGPU browser. Kernels compile to JVM and Wasm from one <code>commonMain</code>.</td><td>GPU from the JVM (desktop, needs wgpu), Android native, iOS, typed <code>kernel.run(a, b)</code> API</td></tr>
+      <tr><td><b>Setup</b></td><td><code>plugins { id("io.github.kernelin") }</code> for Kotlin JVM and Multiplatform; Maven publications for every module</td><td>On Maven Central / Gradle Plugin Portal (for now: use from the repo or <code>publishToMavenLocal</code>)</td></tr>
     </tbody>
   </table>
   </div>
@@ -310,7 +314,10 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
     <li class="done"><span class="box">✓</span><span class="t"><code>kernelSource(::kernel)</code>: the compiler embeds the shader in your program</span></li>
     <li class="done"><span class="box">✓</span><span class="t">Runtime and samples are Kotlin Multiplatform: same kernels compile to JVM and Wasm</span></li>
     <li class="done"><span class="box">✓</span><span class="t">Kotlin GPU host (<code>kernelin-webgpu</code>, Kotlin/Wasm). The demo now runs on it, and its CPU side is the real Kotlin kernel.</span></li>
-    <li class="doing"><span class="box"></span><span class="t">Gradle plugin wired for outside projects</span></li>
+    <li class="done"><span class="box">✓</span><span class="t">Gradle plugin: <code>id("io.github.kernelin")</code> sets up JVM and Multiplatform projects (adds runtime, and the WebGPU host for Wasm)</span></li>
+    <li class="done"><span class="box">✓</span><span class="t">Example projects (<code>examples/hello-jvm</code>, <code>examples/hello-multiplatform</code>) that use only the plugin</span></li>
+    <li class="done"><span class="box">✓</span><span class="t">Maven publishing for all modules (with POM, sources, Apache 2.0 license); works with <code>publishToMavenLocal</code></span></li>
+    <li class="done"><span class="box">✓</span><span class="t">GitHub Actions CI: build, tests with naga, both examples</span></li>
     <li class="done"><span class="box">✓</span><span class="t">README, push to GitHub</span></li>
     <li><span class="box"></span><span class="t">Demo video</span></li>
   </ul>
@@ -326,10 +333,11 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
   <!-- ============================================================ NEXT -->
   <h2>⏭️ Next plan (short)</h2>
   <ol>
-    <li><b>Wire the Gradle plugin</b> so any project can use one line: <code>id("io.github.kernelin")</code>, for JVM and Multiplatform.</li>
+    <li><b>FIR checkers</b> so mistakes show up as red underlines in IntelliJ / Android Studio while typing, not only on build.</li>
     <li><b>Android test</b> on your Motorola phone (the live demo in Chrome first, then AndroidX WebGPU natively).</li>
-    <li><b>FIR checkers</b> so errors show up in the IDE while typing, not only on build.</li>
     <li><b>Faster Kotlin CPU path:</b> remove the per-element lambda and <code>globalId()</code> overhead, so CPU baselines are fairer.</li>
+    <li><b>Publish to Maven Central</b> (needs your Sonatype account and signing key) so people can use it without cloning.</li>
+    <li><b>Demo video + announcement</b>: Kotlin Slack, Kotlin Weekly, a blog post.</li>
   </ol>
 
   <!-- ============================================================ PROJECT -->
@@ -342,12 +350,14 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
 ├── kernelin-compiler-plugin/  K2 plugin: IR → WGSL, and replaces kernelSource(::k) with the shader
 │   └── WgslKernelTranslator.kt   the core translator (~900 lines)
 ├── kernelin-webgpu/           (Wasm) Kotlin WebGPU host: WebGpu, GpuKernel.run(), GpuData
-├── kernelin-gradle-plugin/    future one-line setup for users (scaffolded)
+├── kernelin-gradle-plugin/    id("io.github.kernelin"): one-line setup for JVM + Multiplatform
 ├── samples/
 │   ├── src/commonMain/        6 example kernels (compiled to JVM, Wasm and WGSL)
 │   ├── src/jvmMain/           CPU benchmark   ·  src/jvmTest/  CPU tests
 │   ├── src/wasmJsMain/        Demo.kt: functions the live demo calls
 │   └── web/runner.html        benchmark runner: runs shaders, checks + times them
+├── examples/                  hello-jvm, hello-multiplatform: real projects using only the plugin
+├── .github/workflows/ci.yml   CI: build, test (with naga), run the examples
 ├── benchmarks/                saved benchmark results
 ├── docs/demo/                 live demo (GitHub Pages): page + Kotlin/Wasm build (wasm/)
 └── docs/index.html            this page (project report)</code></pre>
@@ -362,6 +372,13 @@ gradle build
 # CPU benchmark + export data for the GPU runner
 gradle :samples:bench -Pout=&lt;folder&gt;
 # then serve &lt;folder&gt; over http and open runner.html in a WebGPU browser
+
+# run the examples (they use Kernelin from this repo through the Gradle plugin)
+cd examples/hello-jvm &amp;&amp; gradle run
+cd examples/hello-multiplatform &amp;&amp; gradle jvmRun
+
+# publish every module to ~/.m2 to try it in any other project
+gradle publishToMavenLocal
 
 # rebuild the Kotlin/Wasm demo (optimized, ~100 KB) into docs/demo after changing kernels
 gradle :samples:exportDemo
@@ -408,6 +425,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
     <div class="row"><span>Oct 15</span><span>Project report published on GitHub Pages: <a href="https://rajumark.github.io/kernelin/">rajumark.github.io/kernelin</a>.</span></div>
     <div class="row"><span>Oct 15</span><span><b>Live demo</b> added: new <code>mandelbrotView</code> kernel with Float zoom inputs (shader valid first try), reusable WebGPU host, CPU vs GPU race. On the M5: 1.6 M pixels in 7.8 ms on the GPU vs 291 ms in JavaScript on 1 core (37×). Works on phone screens too.</span></div>
     <div class="row"><span>Oct 15</span><span><b>Kotlin/Wasm GPU host.</b> New <code>kernelSource(::k)</code> compiler feature embeds the shader in the program. Runtime and samples became Kotlin Multiplatform (JVM + Wasm). New <code>kernelin-webgpu</code> module drives WebGPU from Kotlin. The live demo now runs on it (100 KB Wasm), and the race is Kotlin vs Kotlin: GPU 10 ms vs Kotlin/Wasm CPU 672 ms (67×), 99.75% identical pixels. 21 tests passing.</span></div>
+    <div class="row"><span>Oct 15</span><span><b>Usable by other projects.</b> Gradle plugin <code>id("io.github.kernelin")</code> works for JVM and Multiplatform. Two example projects verified: JVM prints the generated shader; Multiplatform ran the same kernel on the JVM (all cores) and on the M5 GPU from Kotlin/Wasm. Maven publishing + Apache 2.0 license. GitHub Actions CI added.</span></div>
   </div>
 
   <p class="footer">Kernelin · report updated 2026-10-15</p>
