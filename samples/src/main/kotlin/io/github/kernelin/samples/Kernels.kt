@@ -40,6 +40,35 @@ fun mandelbrot(out: IntArray, width: Int, height: Int, maxIter: Int) {
     out[id] = iter
 }
 
+/**
+ * Zoomable Mandelbrot used by the live demo: [centerX]/[centerY] pick the point in the
+ * complex plane at the middle of the image, [scale] is the size of one pixel.
+ */
+@Kernel
+fun mandelbrotView(
+    out: IntArray,
+    width: Int,
+    height: Int,
+    maxIter: Int,
+    centerX: Float,
+    centerY: Float,
+    scale: Float,
+) {
+    val id = globalId()
+    val x0 = centerX + (id % width - width / 2) * scale
+    val y0 = centerY + (id / width - height / 2) * scale
+    var x = 0f
+    var y = 0f
+    var iter = 0
+    while (x * x + y * y <= 4f && iter < maxIter) {
+        val xt = x * x - y * y + x0
+        y = 2f * x * y + y0
+        x = xt
+        iter++
+    }
+    out[id] = iter
+}
+
 /** Heavy per-element math with a loop and a helper function. */
 @Kernel
 fun waves(input: FloatArray, out: FloatArray, rounds: Int) {

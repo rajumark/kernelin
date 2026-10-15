@@ -24,7 +24,9 @@ becomes
 ## Status
 
 MVP in progress. On an Apple M5, the generated shaders match the Kotlin CPU results and run
-up to 118× faster than all 10 CPU cores (see the [project report](docs/index.html) and `benchmarks/`).
+up to 118× faster than all 10 CPU cores (see the [project report](https://rajumark.github.io/kernelin/) and `benchmarks/`).
+
+**[Live demo →](https://rajumark.github.io/kernelin/demo/)** a fractal computed on your GPU by Kernelin-generated code.
 
 ## Modules
 

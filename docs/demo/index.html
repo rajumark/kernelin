@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kernelin Live Demo</title>
+<meta name="description" content="A Mandelbrot fractal computed on your GPU by a shader the Kernelin compiler plugin generated from plain Kotlin.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f6f3;
+    --ink: #37352f;
+    --ink-2: #6b6a65;
+    --muted: #9b9a97;
+    --line: #e9e9e7;
+    --line-2: #dcdbd7;
+    --accent: #2a78d6;
+    --good: #0f7b6c;
+    --good-bg: #dbeddb;
+    --warn: #9f6b00;
+    --warn-bg: #fdecc8;
+    --code-bg: #f7f6f3;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font); }
+  .page { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  .crumbs { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .crumbs a { color: var(--ink-2); }
+  h1 { font-size: 30px; line-height: 1.2; margin: 4px 0 4px; font-weight: 700; }
+  h2 { font-size: 18px; margin: 28px 0 8px; font-weight: 650; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  p { margin: 4px 0 8px; }
+  a { color: inherit; text-decoration: underline; text-decoration-color: var(--line-2); }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); color: #eb5757; padding: 1px 4px; border-radius: 4px; }
+  pre { font-family: var(--mono); font-size: 12px; line-height: 1.5; background: var(--code-bg); border-radius: 6px; padding: 12px 14px; overflow: auto; margin: 0; max-height: 460px; }
+  pre code { background: none; color: var(--ink); padding: 0; font-size: inherit; }
+  .subtitle { color: var(--ink-2); font-size: 15px; margin: 0 0 14px; }
+
+  .stage { position: relative; border-radius: 8px; overflow: hidden; background: #0b0b14; aspect-ratio: 16 / 10; }
+  canvas { display: block; width: 100%; height: 100%; cursor: zoom-in; image-rendering: auto; }
+  .hint { position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.92); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font-size: 12px; pointer-events: none; }
+  .badge { position: absolute; right: 10px; top: 10px; background: rgba(255,255,255,.92); color: var(--ink); border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 10px 0; font-size: 13px; }
+  .controls label { color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
+  .controls input[type=range] { width: 140px; accent-color: var(--accent); }
+  select, button { font: inherit; font-size: 13px; color: var(--ink); background: #fff; border: 1px solid var(--line-2); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover, select:hover { background: var(--surface); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #256abf; }
+  button:disabled { opacity: .5; cursor: default; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0; }
+  .tile { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; min-width: 0; }
+  .tile .k { color: var(--muted); font-size: 12px; }
+  .tile .v { font-size: 22px; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .tile .s { color: var(--ink-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .callout { display: flex; gap: 10px; background: var(--surface); border-radius: 6px; padding: 10px 14px; margin: 10px 0; font-size: 13.5px; }
+  .callout.warn { background: #fbf3db; }
+  .callout.hidden { display: none; }
+
+  .tabs { display: flex; gap: 4px; margin: 6px 0; }
+  .tabs button { border: none; background: none; padding: 4px 10px; border-radius: 6px; color: var(--ink-2); }
+  .tabs button.on { background: var(--surface); color: var(--ink); font-weight: 600; }
+  .note { color: var(--ink-2); font-size: 13px; }
+  .footer { color: var(--muted); font-size: 12px; margin-top: 36px; }
+
+  @media (max-width: 680px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="crumbs"><a href="../">Kernelin</a> / Live demo</div>
+  <h1>⚡ Kotlin on your GPU, live</h1>
+  <p class="subtitle">This fractal is computed on <b>your</b> GPU by a shader that the Kernelin compiler plugin generated from a plain Kotlin function. No hand-written GPU code.</p>
+
+  <div class="callout warn hidden" id="nogpu">⚠️ <div><b>WebGPU isn't available in this browser</b>, so the image is drawn on the CPU only. Try a recent Chrome, Edge or Safari (desktop or Android).</div></div>
+
+  <div class="stage">
+    <canvas id="canvas" width="1600" height="1000" aria-label="Mandelbrot fractal. Click to zoom in, shift-click to zoom out."></canvas>
+    <div class="badge" id="badge">loading...</div>
+    <div class="hint">Click to zoom in · Shift-click or right-click to zoom out</div>
+  </div>
+
+  <div class="controls">
+    <label>Max iterations <input type="range" id="iters" min="50" max="2000" step="50" value="400"><b id="itersVal">400</b></label>
+    <label>Resolution
+      <select id="res">
+        <option value="800x500">800 × 500</option>
+        <option value="1600x1000" selected>1600 × 1000</option>
+        <option value="2400x1500">2400 × 1500</option>
+      </select>
+    </label>
+    <button id="reset">Reset view</button>
+    <button id="race" class="primary">Race: CPU vs GPU</button>
+  </div>
+
+  <div class="stats">
+    <div class="tile"><div class="k">GPU (compute + copy back)</div><div class="v" id="gpuMs">–</div><div class="s" id="gpuInfo">–</div></div>
+    <div class="tile"><div class="k">CPU (JavaScript, 1 core)</div><div class="v" id="cpuMs">–</div><div class="s">press "Race"</div></div>
+    <div class="tile"><div class="k">GPU is faster by</div><div class="v" id="speedup">–</div><div class="s">same frame, same math</div></div>
+    <div class="tile"><div class="k">Pixels</div><div class="v" id="pixels">–</div><div class="s" id="zoom">zoom 1×</div></div>
+  </div>
+  <p class="note" id="precision"></p>
+
+  <h2>The code behind it</h2>
+  <p>You write the <b>Kotlin</b>. At build time, Kernelin translates it into the <b>WGSL</b> (switch tabs to compare), which this page runs with WebGPU. The same Kotlin function also runs on the JVM in unit tests.</p>
+  <div class="tabs">
+    <button class="on" data-tab="kotlin">Kotlin (you write)</button>
+    <button data-tab="wgsl">WGSL (Kernelin generates)</button>
+  </div>
+  <pre><code id="code">loading...</code></pre>
+
+  <h2>How it runs</h2>
+  <p>Kotlin <code>@Kernel</code> function → K2 compiler → Kernelin plugin (IR → WGSL) → <code>.wgsl</code> + <code>.json</code> manifest → this page loads them with a ~150-line WebGPU host (<a href="kernelin-web.js">kernelin-web.js</a>) → your GPU.</p>
+  <p class="note">The CPU side of the race is a JavaScript copy of the same loop running in the page, so both sides run in the same browser. Timings include copying the result back from the GPU, but not drawing it.</p>
+
+  <p class="footer"><a href="../">Project report</a> · <a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a></p>
+</div>
+
+<script type="module">
+import { KernelinGpu } from './kernelin-web.js';
+
+const KERNEL = 'kernels/io.github.kernelin.samples.mandelbrotView';
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const $ = (id) => document.getElementById(id);
+const START = { cx: -0.6, cy: 0.0, span: 3.4 };   // span = width of the view in the complex plane
+let view = { ...START };
+let width = 1600, height = 1000, maxIter = 400;
+let gpu = null, kernel = null, busy = false, pending = false;
+
+// Classic deep-blue -> white -> gold gradient, cycled by iteration count.
+const STOPS = [[0, 0, 7, 100], [0.16, 32, 107, 203], [0.42, 237, 255, 255], [0.6425, 255, 170, 0], [0.8575, 0, 2, 0], [1, 0, 7, 100]];
+let palette = new Uint32Array(0);
+function gradient(t) {
+  let i = 0;
+  while (t > STOPS[i + 1][0]) i++;
+  const [a, b] = [STOPS[i], STOPS[i + 1]];
+  const f = (t - a[0]) / (b[0] - a[0]);
+  return [1, 2, 3].map((k) => Math.round(a[k] + (b[k] - a[k]) * f));
+}
+function buildPalette(n) {
+  palette = new Uint32Array(n + 1);
+  for (let i = 0; i < n; i++) {
+    const [r, g, b] = gradient((Math.sqrt(i) / 14) % 1);
+    palette[i] = (255 << 24) | (b << 16) | (g << 8) | r;
+  }
+  palette[n] = 0xff000000; // inside the set
+}
+
+function draw(iters) {
+  const img = ctx.createImageData(width, height);
+  const px = new Uint32Array(img.data.buffer);
+  for (let i = 0; i < iters.length; i++) px[i] = palette[iters[i]];
+  ctx.putImageData(img, 0, 0);
+}
+
+function params() {
+  const scale = view.span / width;
+  return { size: width * height, scalars: { width, height, maxIter, centerX: view.cx, centerY: view.cy, scale } };
+}
+
+// Same algorithm as the Kotlin kernel, for the CPU side of the race.
+function cpuMandelbrot({ size, scalars: s }) {
+  const out = new Int32Array(size);
+  for (let id = 0; id < size; id++) {
+    const x0 = s.centerX + ((id % s.width) - (s.width >> 1)) * s.scale;
+    const y0 = s.centerY + (Math.trunc(id / s.width) - (s.height >> 1)) * s.scale;
+    let x = 0, y = 0, iter = 0;
+    while (x * x + y * y <= 4 && iter < s.maxIter) {
+      const xt = x * x - y * y + x0;
+      y = 2 * x * y + y0;
+      x = xt;
+      iter++;
+    }
+    out[id] = iter;
+  }
+  return out;
+}
+
+const fmt = (ms) => ms >= 1000 ? (ms / 1000).toFixed(2) + ' s' : ms.toFixed(ms < 10 ? 1 : 0) + ' ms';
+
+function updateInfo() {
+  $('pixels').textContent = (width * height / 1e6).toFixed(1) + ' M';
+  const z = START.span / view.span;
+  $('zoom').textContent = 'zoom ' + (z >= 1000 ? z.toExponential(1) : Math.round(z).toLocaleString()) + '×';
+  $('precision').textContent = view.span / width < 2e-7
+    ? 'You reached the limit of 32-bit Float precision (GPUs compute in Float), so the image turns blocky. Reset to explore again.'
+    : '';
+}
+
+async function render() {
+  if (busy) { pending = true; return; }
+  busy = true;
+  try {
+    updateInfo();
+    const p = params();
+    if (kernel) {
+      const { outputs, ms } = await kernel.run({ ...p, buffers: { out: p.size } });
+      $('gpuMs').textContent = fmt(ms);
+      draw(outputs.out);
+    } else {
+      const t0 = performance.now();
+      const out = cpuMandelbrot(p);
+      $('cpuMs').textContent = fmt(performance.now() - t0);
+      draw(out);
+    }
+  } catch (e) {
+    $('badge').textContent = 'error: ' + e.message;
+    console.error(e);
+  } finally {
+    busy = false;
+    if (pending) { pending = false; render(); }
+  }
+}
+
+async function race() {
+  if (!kernel) return;
+  $('race').disabled = true;
+  $('cpuMs').textContent = 'running...';
+  $('speedup').textContent = '–';
+  await new Promise((r) => setTimeout(r, 30));
+  const p = params();
+  const gpuRuns = [];
+  for (let i = 0; i < 5; i++) gpuRuns.push((await kernel.run({ ...p, buffers: { out: p.size } })).ms);
+  const gpuMs = gpuRuns.sort((a, b) => a - b)[2];
+  const t0 = performance.now();
+  cpuMandelbrot(p);
+  const cpuMs = performance.now() - t0;
+  $('gpuMs').textContent = fmt(gpuMs);
+  $('cpuMs').textContent = fmt(cpuMs);
+  $('speedup').textContent = Math.round(cpuMs / gpuMs) + '×';
+  $('race').disabled = false;
+  window.kernelinDemo = { gpuMs, cpuMs, width, height, maxIter, view: { ...view } };
+}
+
+function zoomAt(ev, factor) {
+  const r = canvas.getBoundingClientRect();
+  const fx = (ev.clientX - r.left) / r.width, fy = (ev.clientY - r.top) / r.height;
+  const scale = view.span / width;
+  view.cx += (fx - 0.5) * width * scale;
+  view.cy += (fy - 0.5) * height * scale;
+  view.span *= factor;
+  $('cpuMs').textContent = '–';
+  $('speedup').textContent = '–';
+  render();
+}
+canvas.addEventListener('click', (ev) => zoomAt(ev, ev.shiftKey ? 2 : 0.5));
+canvas.addEventListener('contextmenu', (ev) => { ev.preventDefault(); zoomAt(ev, 2); });
+$('iters').addEventListener('input', () => {
+  maxIter = +$('iters').value; $('itersVal').textContent = maxIter; buildPalette(maxIter); render();
+});
+$('res').addEventListener('change', () => {
+  [width, height] = $('res').value.split('x').map(Number);
+  canvas.width = width; canvas.height = height; render();
+});
+$('reset').addEventListener('click', () => { view = { ...START }; render(); });
+$('race').addEventListener('click', race);
+
+// Code tabs: the Kotlin is read from the real source file, the WGSL is the generated file.
+const sources = {};
+async function loadSources() {
+  const kt = await fetch('kernels/Kernels.kt').then((r) => r.text());
+  const start = kt.indexOf('@Kernel\nfun mandelbrotView');
+  sources.kotlin = start >= 0 ? kt.slice(start, kt.indexOf('\n}\n', start) + 2) : kt;
+  sources.wgsl = kernel ? kernel.code : await fetch(KERNEL + '.wgsl').then((r) => r.text());
+  $('code').textContent = sources.kotlin;
+}
+document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+  $('code').textContent = sources[b.dataset.tab] || '';
+}));
+
+(async () => {
+  buildPalette(maxIter);
+  try {
+    gpu = await KernelinGpu.create();
+    kernel = await gpu.load(KERNEL);
+    $('badge').textContent = 'GPU · ' + (gpu.info || 'WebGPU');
+    $('gpuInfo').textContent = gpu.info || 'WebGPU';
+  } catch (e) {
+    console.warn(e);
+    $('nogpu').classList.remove('hidden');
+    $('badge').textContent = 'CPU only';
+    $('race').disabled = true;
+    $('gpuInfo').textContent = 'not available';
+  }
+  await loadSources();
+  await render();
+})();
+</script>
+</body>
+</html>
