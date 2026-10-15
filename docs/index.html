@@ -132,6 +132,7 @@
     <dt>Tests</dt><dd><span class="tag good">17 / 17 passing</span> · every generated shader validated by naga</dd>
     <dt>Stack</dt><dd>Kotlin 2.4.21 (K2) · JDK 21 · Gradle 9.6 · WebGPU</dd>
     <dt>Tested on</dt><dd>Apple M5 (10 CPU cores, 8-core GPU, Metal) · WebGPU in Chromium 152</dd>
+    <dt>Repository</dt><dd><a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a></dd>
     <dt>Location</dt><dd><code>~/Documents/kotlin/kernelin</code></dd>
   </dl>
 
@@ -292,7 +293,8 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
     <li class="doing"><span class="box"></span><span class="t">Visual demo page (Mandelbrot drawn live, CPU vs GPU timer)</span></li>
     <li><span class="box"></span><span class="t">Kotlin-side GPU host (no hand-written JS): Kotlin/Wasm or JVM + wgpu</span></li>
     <li><span class="box"></span><span class="t">Gradle plugin wired for outside projects</span></li>
-    <li><span class="box"></span><span class="t">README, demo video, push to GitHub</span></li>
+    <li class="done"><span class="box">✓</span><span class="t">README, push to GitHub</span></li>
+    <li><span class="box"></span><span class="t">Demo video</span></li>
   </ul>
   <h3>v1.0 <span class="tag gray">planned</span></h3>
   <ul class="check">
@@ -326,7 +328,7 @@ Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' ca
 ├── samples/                   5 example kernels, CPU tests, benchmark
 │   └── web/runner.html        WebGPU runner: runs shaders, checks + times them
 ├── benchmarks/                saved benchmark results
-└── report.html                this page</code></pre>
+└── docs/index.html            this page (project report)</code></pre>
     </div>
   </details>
   <details>
@@ -375,6 +377,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
     <div class="row"><span>Oct 15</span><span>Installed naga 30 (WGSL validator); tests now validate every shader. 17 tests passing.</span></div>
     <div class="row"><span>Oct 15</span><span>First real GPU run on the M5 via WebGPU: 5/5 kernels correct, up to 118× faster than 10 CPU cores.</span></div>
     <div class="row"><span>Oct 15</span><span>Improvements: cleaner output (<code>x += y</code>, <code>i++</code>, no temp variables), clearer errors for Double and lambdas, fixed name clash with Kernelin's internal names, fixed benchmark output-buffer bug.</span></div>
+    <div class="row"><span>Oct 15</span><span>First commit <code>69175e6</code> on <code>main</code> (34 files), pushed to <a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a>.</span></div>
   </div>
 
   <p class="footer">Kernelin · report updated 2026-10-15</p>
