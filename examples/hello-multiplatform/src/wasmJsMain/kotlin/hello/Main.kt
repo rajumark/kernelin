@@ -1,8 +1,8 @@
 package hello
 
-import io.github.kernelin.kernelSource
-import io.github.kernelin.webgpu.GpuData
-import io.github.kernelin.webgpu.WebGpu
+import io.github.rajumark.kernelin.kernelSource
+import io.github.rajumark.kernelin.webgpu.GpuData
+import io.github.rajumark.kernelin.webgpu.WebGpu
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch

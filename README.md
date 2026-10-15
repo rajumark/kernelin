@@ -34,18 +34,38 @@ up to 118× faster than all 10 CPU cores (see the [project report](https://rajum
 
 ## Use it in your project
 
+Kernelin is on Maven Central. Make sure `mavenCentral()` is in your plugin repositories:
+
+```kotlin
+// settings.gradle.kts
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+```
+
 ```kotlin
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.21"          // or kotlin("multiplatform")
-    id("io.github.kernelin")
+    id("io.github.rajumark.kernelin") version "0.1.0"
 }
 ```
 
-The plugin runs the Kernelin compiler plugin on every compilation and adds `kernelin-runtime`
-(plus `kernelin-webgpu` to `wasmJsMain` in Multiplatform projects). Not on Maven Central yet:
-see [`examples/`](examples) for projects that use it straight from this repository
-(`examples/hello-jvm`, `examples/hello-multiplatform`).
+The plugin runs the Kernelin compiler plugin on every compilation and adds
+`io.github.rajumark:kernelin-runtime` (plus `kernelin-webgpu` to `wasmJsMain` in Multiplatform projects).
+Kernelin 0.1.0 is built for **Kotlin 2.4.21**; the compiler plugin API changes between Kotlin versions.
+
+| Artifact | What it is |
+|---|---|
+| `io.github.rajumark:kernelin-runtime:0.1.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu` (JVM + Wasm) |
+| `io.github.rajumark:kernelin-webgpu:0.1.0` | Kotlin/Wasm WebGPU host |
+| `io.github.rajumark:kernelin-compiler-plugin:0.1.0` | the K2 compiler plugin (added by the Gradle plugin) |
+| `io.github.rajumark:kernelin-gradle-plugin:0.1.0` | Gradle plugin `io.github.rajumark.kernelin` |
+
+See [`examples/`](examples) for complete projects (`hello-jvm`, `hello-multiplatform`).
 
 ## Run a kernel on the GPU from Kotlin
 
@@ -67,7 +87,7 @@ val y2 = result.floats("y")
 | `kernelin-runtime` | Multiplatform (JVM + Wasm): `@Kernel`, `globalId()`, `KernelinCpu` (CPU runner), `kernelSource(::k)` |
 | `kernelin-compiler-plugin` | K2 compiler plugin; `WgslKernelTranslator` turns Kotlin IR into WGSL and embeds it where `kernelSource(::k)` is called |
 | `kernelin-webgpu` | Kotlin/Wasm WebGPU host: `WebGpu.create()`, `gpu.load(kernelSource(::k))`, `kernel.run(...)` |
-| `kernelin-gradle-plugin` | `id("io.github.kernelin")`: one-line setup for JVM and Multiplatform projects |
+| `kernelin-gradle-plugin` | `id("io.github.rajumark.kernelin")`: one-line setup for JVM and Multiplatform projects |
 | `samples` | Kernels in `commonMain` (JVM + Wasm), CPU tests and benchmark (JVM), live demo entry points (Wasm) |
 
 ## Build

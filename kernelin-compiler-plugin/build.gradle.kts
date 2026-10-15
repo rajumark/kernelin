@@ -1,6 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    `maven-publish`
+    alias(libs.plugins.vanniktech.maven.publish)
 }
 
 kotlin {
@@ -28,16 +28,4 @@ tasks.test {
     jvmArgumentProviders.add(CommandLineArgumentProvider {
         listOf("-Dkernelin.pluginJar=${pluginJar.get().asFile.absolutePath}")
     })
-}
-
-java {
-    withSourcesJar()
-}
-
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            from(components["java"])
-        }
-    }
 }

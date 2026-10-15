@@ -1,7 +1,7 @@
-package io.github.kernelin.samples
+package io.github.rajumark.kernelin.samples
 
-import io.github.kernelin.Kernel
-import io.github.kernelin.globalId
+import io.github.rajumark.kernelin.Kernel
+import io.github.rajumark.kernelin.globalId
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt

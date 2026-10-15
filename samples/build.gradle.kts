@@ -49,7 +49,7 @@ tasks.register<JavaExec>("bench") {
     description = "Runs the CPU benchmarks and exports data for the WebGPU runner."
     dependsOn(jvmMain.compileTaskProvider)
     classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
-    mainClass.set("io.github.kernelin.samples.BenchmarkKt")
+    mainClass.set("io.github.rajumark.kernelin.samples.BenchmarkKt")
     maxHeapSize = "6g"
     val out = providers.gradleProperty("out").orElse(layout.buildDirectory.dir("kernelin-bench").map { it.asFile.path })
     argumentProviders.add(CommandLineArgumentProvider { listOf(out.get()) })
@@ -68,10 +68,10 @@ tasks.register<Copy>("exportDemo") {
         into("wasm")
     }
     from(layout.buildDirectory.dir("classes/kotlin/jvm/main/kernelin")) {
-        include("io.github.kernelin.samples.mandelbrotView.*")
+        include("io.github.rajumark.kernelin.samples.mandelbrotView.*")
         into("kernels")
     }
-    from("src/commonMain/kotlin/io/github/kernelin/samples/Kernels.kt") {
+    from("src/commonMain/kotlin/io/github/rajumark/kernelin/samples/Kernels.kt") {
         into("kernels")
     }
 }

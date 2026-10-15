@@ -1,7 +1,7 @@
 package hello
 
-import io.github.kernelin.KernelinCpu
-import io.github.kernelin.kernelSource
+import io.github.rajumark.kernelin.KernelinCpu
+import io.github.rajumark.kernelin.kernelSource
 
 fun main() {
     val out = IntArray(8)

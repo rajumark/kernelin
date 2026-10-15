@@ -123,7 +123,7 @@
     <li><b>GPU side:</b> the Kernelin compiler plugin translates <code>mandelbrotView</code> to WGSL and embeds it in place of <code>kernelSource(::mandelbrotView)</code>. The Kotlin WebGPU host (<code>kernelin-webgpu</code>) compiles it, packs the parameters and runs it on your GPU.</li>
     <li><b>CPU side:</b> the very same <code>mandelbrotView</code> function, compiled to Wasm, called once per pixel by <code>KernelinCpu.dispatch</code>.</li>
   </ul>
-  <p class="note">JavaScript only handles the buttons and paints the pixels. GPU timings include copying the result back from the GPU, but not drawing it. Source: <a href="https://github.com/rajumark/kernelin/blob/main/samples/src/wasmJsMain/kotlin/io/github/kernelin/samples/Demo.kt">Demo.kt</a>.</p>
+  <p class="note">JavaScript only handles the buttons and paints the pixels. GPU timings include copying the result back from the GPU, but not drawing it. Source: <a href="https://github.com/rajumark/kernelin/blob/main/samples/src/wasmJsMain/kotlin/io/github/rajumark/kernelin/samples/Demo.kt">Demo.kt</a>.</p>
 
   <p class="footer"><a href="../">Project report</a> · <a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a></p>
 </div>

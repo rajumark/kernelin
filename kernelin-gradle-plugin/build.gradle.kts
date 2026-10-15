@@ -1,6 +1,6 @@
 plugins {
     `java-gradle-plugin`
-    `maven-publish`
+    alias(libs.plugins.vanniktech.maven.publish)
     alias(libs.plugins.kotlin.jvm)
 }
 
@@ -15,10 +15,10 @@ dependencies {
 gradlePlugin {
     plugins {
         create("kernelin") {
-            id = "io.github.kernelin"
+            id = "io.github.rajumark.kernelin"
             displayName = "Kernelin"
             description = "Write GPU kernels in plain Kotlin: compiles @Kernel functions to WGSL compute shaders."
-            implementationClass = "io.github.kernelin.gradle.KernelinGradlePlugin"
+            implementationClass = "io.github.rajumark.kernelin.gradle.KernelinGradlePlugin"
         }
     }
 }
@@ -30,9 +30,11 @@ val generateVersion by tasks.registering {
     inputs.property("version", version)
     outputs.dir(out)
     doLast {
-        val file = out.get().file("io/github/kernelin/gradle/KernelinVersion.kt").asFile
+        // Start clean so a renamed package never leaves a stale class behind in the jar.
+        out.get().asFile.deleteRecursively()
+        val file = out.get().file("io/github/rajumark/kernelin/gradle/KernelinVersion.kt").asFile
         file.parentFile.mkdirs()
-        file.writeText("package io.github.kernelin.gradle\n\ninternal const val KERNELIN_VERSION = \"$version\"\n")
+        file.writeText("package io.github.rajumark.kernelin.gradle\n\ninternal const val KERNELIN_VERSION = \"$version\"\n")
     }
 }
 kotlin.sourceSets.main { kotlin.srcDir(generateVersion) }

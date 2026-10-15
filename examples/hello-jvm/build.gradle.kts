@@ -1,6 +1,6 @@
 plugins {
     kotlin("jvm") version "2.4.21"
-    id("io.github.kernelin")
+    id("io.github.rajumark.kernelin")
     application
 }
 

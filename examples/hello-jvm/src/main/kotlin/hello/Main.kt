@@ -1,9 +1,9 @@
 package hello
 
-import io.github.kernelin.Kernel
-import io.github.kernelin.KernelinCpu
-import io.github.kernelin.globalId
-import io.github.kernelin.kernelSource
+import io.github.rajumark.kernelin.Kernel
+import io.github.rajumark.kernelin.KernelinCpu
+import io.github.rajumark.kernelin.globalId
+import io.github.rajumark.kernelin.kernelSource
 
 /** Makes every pixel a bit brighter, keeping values between 0 and 1. */
 @Kernel

@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    `maven-publish`
+    alias(libs.plugins.vanniktech.maven.publish)
 }
 
 kotlin {

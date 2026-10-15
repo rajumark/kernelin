@@ -1,41 +1,22 @@
 plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.multiplatform) apply false
+    alias(libs.plugins.vanniktech.maven.publish) apply false
 }
 
+// Coordinates come from gradle.properties (GROUP, VERSION_NAME), the same values the publish plugin uses.
 allprojects {
-    group = "io.github.kernelin"
-    version = "0.1.0-SNAPSHOT"
+    group = providers.gradleProperty("GROUP").get()
+    version = providers.gradleProperty("VERSION_NAME").get()
 }
 
-// Shared POM metadata for every published module (needed for Maven Central later).
+// Published modules: upload to the Maven Central Portal and sign. Credentials and the signing key live in
+// ~/.gradle/gradle.properties (never in this repo). Nothing uploads unless a *MavenCentral* task runs.
 subprojects {
-    plugins.withId("maven-publish") {
-        extensions.configure<PublishingExtension> {
-            publications.withType<MavenPublication>().configureEach {
-                pom {
-                    name.set(project.name)
-                    description.set("Kernelin: write GPU kernels in plain Kotlin, compiled to WGSL by a K2 compiler plugin.")
-                    url.set("https://github.com/rajumark/kernelin")
-                    licenses {
-                        license {
-                            name.set("Apache License 2.0")
-                            url.set("https://www.apache.org/licenses/LICENSE-2.0")
-                        }
-                    }
-                    developers {
-                        developer {
-                            id.set("rajumark")
-                            name.set("rajumark")
-                            url.set("https://github.com/rajumark")
-                        }
-                    }
-                    scm {
-                        url.set("https://github.com/rajumark/kernelin")
-                        connection.set("scm:git:https://github.com/rajumark/kernelin.git")
-                    }
-                }
-            }
+    plugins.withId("com.vanniktech.maven.publish") {
+        extensions.configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
+            publishToMavenCentral()
+            if (providers.gradleProperty("signingInMemoryKey").isPresent) signAllPublications()
         }
     }
 }

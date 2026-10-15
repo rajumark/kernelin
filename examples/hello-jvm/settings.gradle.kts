@@ -1,8 +1,8 @@
 rootProject.name = "hello-jvm"
 
 pluginManagement {
-    // Uses Kernelin straight from this repository. In your own project, drop the includeBuild lines;
-    // the plugin and libraries then come from the repositories below.
+    // Uses Kernelin straight from this repository. In your own project, drop both includeBuild lines and
+    // write id("io.github.rajumark.kernelin") version "0.1.0": it then comes from Maven Central.
     includeBuild("../..")
     repositories {
         gradlePluginPortal()
