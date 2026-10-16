@@ -621,7 +621,7 @@ gradle :samples:exportDemo                     # rebuild the live demo into docs
 
 - [CONTRIBUTING.md](https://github.com/rajumark/kernelin/blob/main/CONTRIBUTING.md): how to set up, and the rule for adding a new Kotlin construct: translator change, WGSL test, GPU-vs-CPU test, fuzzer case and a row in the tables on this page.
 - [VERSIONING.md](https://github.com/rajumark/kernelin/blob/main/VERSIONING.md): semantic versioning. Before 1.0, minor releases may change the public API (always listed in the changelog); patch releases never do. Each release supports exactly one Kotlin version. Public API = the runtime and WebGPU classes, the Gradle plugin id and the supported Kotlin subset; the exact WGSL text is not.
-- [SECURITY.md](https://github.com/rajumark/kernelin/blob/main/SECURITY.md): how to report a vulnerability privately.
+- Security: report vulnerabilities privately at [github.com/rajumark/kernelin/security/advisories/new](https://github.com/rajumark/kernelin/security/advisories/new), not in public issues. Policy: [SECURITY.md](https://github.com/rajumark/kernelin/blob/main/SECURITY.md).
 - Issue and pull request templates are in `.github/`.
 
 ## Troubleshooting

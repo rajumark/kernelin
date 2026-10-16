@@ -565,7 +565,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
       <tr><td class="area">IDE &amp; tooling</td><td>errors only on build (no red underlines while typing), no IntelliJ plugin ("show generated WGSL", gutter icons), no kernel debugger, no profiler, stale <code>.wgsl</code> files after deleting a kernel, Gradle configuration cache not verified</td><td><span class="tag blue">v1–v2</span></td></tr>
       <tr><td class="area">Compatibility</td><td>works with exactly one Kotlin version (2.4.21); no Kotlin version matrix in CI. Public API check (<code>checkKotlinAbi</code>) and VERSIONING.md done on main</td><td><span class="tag blue">v2</span></td></tr>
       <tr><td class="area">Distribution</td><td>0.1.0 prepared but <b>not yet on Maven Central</b> or the Gradle Plugin Portal; no API docs (Dokka); docs site now live (docs.html)</td><td><span class="tag warn">v1</span></td></tr>
-      <tr><td class="area">Community</td><td>no CONTRIBUTING, Code of Conduct, SECURITY policy, issue templates or design docs; one maintainer</td><td><span class="tag blue">v1–v2</span></td></tr>
+      <tr><td class="area">Community</td><td>no Code of Conduct or design docs yet; one maintainer. CONTRIBUTING, VERSIONING, SECURITY (private vulnerability reporting enabled) and issue/PR templates done on main</td><td><span class="tag blue">v1–v2</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -618,7 +618,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
     <div class="inner"><ul class="check">
       <li><span class="box"></span><span class="t">Automated, signed releases from CI only (no laptop releases), with build provenance</span></li>
       <li><span class="box"></span><span class="t">Reproducible builds and an SBOM for every release</span></li>
-      <li><span class="box"></span><span class="t">SECURITY.md with a private way to report bugs; dependency scanning (Dependabot)</span></li>
+      <li class="doing"><span class="box"></span><span class="t">SECURITY.md with a private way to report bugs (done: <a href="https://github.com/rajumark/kernelin/security/advisories/new">private reporting</a>); dependency scanning (Dependabot) still to do</span></li>
       <li><span class="box"></span><span class="t">The compiler plugin never touches the network and reads only the files it compiles</span></li>
       <li><span class="box"></span><span class="t">Native GPU libraries (wgpu/Dawn) pinned, checksummed and updated on a schedule</span></li>
     </ul></div>
