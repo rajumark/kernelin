@@ -1,0 +1,75 @@
+// Klib ABI Dump
+// Targets: [wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.rajumark:kernelin-runtime>
+open annotation class io.github.rajumark.kernelin/Kernel : kotlin/Annotation { // io.github.rajumark.kernelin/Kernel|null[0]
+    constructor <init>() // io.github.rajumark.kernelin/Kernel.<init>|<init>(){}[0]
+}
+
+final class io.github.rajumark.kernelin/KernelManifest { // io.github.rajumark.kernelin/KernelManifest|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/Int, kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param>) // io.github.rajumark.kernelin/KernelManifest.<init>|<init>(kotlin.String;kotlin.String;kotlin.Int;kotlin.collections.List<io.github.rajumark.kernelin.KernelManifest.Param>){}[0]
+
+    final val buffers // io.github.rajumark.kernelin/KernelManifest.buffers|{}buffers[0]
+        final fun <get-buffers>(): kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param> // io.github.rajumark.kernelin/KernelManifest.buffers.<get-buffers>|<get-buffers>(){}[0]
+    final val entryPoint // io.github.rajumark.kernelin/KernelManifest.entryPoint|{}entryPoint[0]
+        final fun <get-entryPoint>(): kotlin/String // io.github.rajumark.kernelin/KernelManifest.entryPoint.<get-entryPoint>|<get-entryPoint>(){}[0]
+    final val kernel // io.github.rajumark.kernelin/KernelManifest.kernel|{}kernel[0]
+        final fun <get-kernel>(): kotlin/String // io.github.rajumark.kernelin/KernelManifest.kernel.<get-kernel>|<get-kernel>(){}[0]
+    final val params // io.github.rajumark.kernelin/KernelManifest.params|{}params[0]
+        final fun <get-params>(): kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param> // io.github.rajumark.kernelin/KernelManifest.params.<get-params>|<get-params>(){}[0]
+    final val scalars // io.github.rajumark.kernelin/KernelManifest.scalars|{}scalars[0]
+        final fun <get-scalars>(): kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param> // io.github.rajumark.kernelin/KernelManifest.scalars.<get-scalars>|<get-scalars>(){}[0]
+    final val uniformBytes // io.github.rajumark.kernelin/KernelManifest.uniformBytes|{}uniformBytes[0]
+        final fun <get-uniformBytes>(): kotlin/Int // io.github.rajumark.kernelin/KernelManifest.uniformBytes.<get-uniformBytes>|<get-uniformBytes>(){}[0]
+    final val workgroupSize // io.github.rajumark.kernelin/KernelManifest.workgroupSize|{}workgroupSize[0]
+        final fun <get-workgroupSize>(): kotlin/Int // io.github.rajumark.kernelin/KernelManifest.workgroupSize.<get-workgroupSize>|<get-workgroupSize>(){}[0]
+
+    final class Param { // io.github.rajumark.kernelin/KernelManifest.Param|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin/String, kotlin/Int = ..., kotlin/String = ...) // io.github.rajumark.kernelin/KernelManifest.Param.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.Int;kotlin.String){}[0]
+
+        final val access // io.github.rajumark.kernelin/KernelManifest.Param.access|{}access[0]
+            final fun <get-access>(): kotlin/String // io.github.rajumark.kernelin/KernelManifest.Param.access.<get-access>|<get-access>(){}[0]
+        final val binding // io.github.rajumark.kernelin/KernelManifest.Param.binding|{}binding[0]
+            final fun <get-binding>(): kotlin/Int // io.github.rajumark.kernelin/KernelManifest.Param.binding.<get-binding>|<get-binding>(){}[0]
+        final val isBuffer // io.github.rajumark.kernelin/KernelManifest.Param.isBuffer|{}isBuffer[0]
+            final fun <get-isBuffer>(): kotlin/Boolean // io.github.rajumark.kernelin/KernelManifest.Param.isBuffer.<get-isBuffer>|<get-isBuffer>(){}[0]
+        final val isWritten // io.github.rajumark.kernelin/KernelManifest.Param.isWritten|{}isWritten[0]
+            final fun <get-isWritten>(): kotlin/Boolean // io.github.rajumark.kernelin/KernelManifest.Param.isWritten.<get-isWritten>|<get-isWritten>(){}[0]
+        final val kind // io.github.rajumark.kernelin/KernelManifest.Param.kind|{}kind[0]
+            final fun <get-kind>(): kotlin/String // io.github.rajumark.kernelin/KernelManifest.Param.kind.<get-kind>|<get-kind>(){}[0]
+        final val name // io.github.rajumark.kernelin/KernelManifest.Param.name|{}name[0]
+            final fun <get-name>(): kotlin/String // io.github.rajumark.kernelin/KernelManifest.Param.name.<get-name>|<get-name>(){}[0]
+        final val type // io.github.rajumark.kernelin/KernelManifest.Param.type|{}type[0]
+            final fun <get-type>(): kotlin/String // io.github.rajumark.kernelin/KernelManifest.Param.type.<get-type>|<get-type>(){}[0]
+    }
+
+    final object Companion { // io.github.rajumark.kernelin/KernelManifest.Companion|null[0]
+        final fun parse(kotlin/String): io.github.rajumark.kernelin/KernelManifest // io.github.rajumark.kernelin/KernelManifest.Companion.parse|parse(kotlin.String){}[0]
+    }
+}
+
+final class io.github.rajumark.kernelin/KernelSource { // io.github.rajumark.kernelin/KernelSource|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String) // io.github.rajumark.kernelin/KernelSource.<init>|<init>(kotlin.String;kotlin.String;kotlin.String){}[0]
+
+    final val manifest // io.github.rajumark.kernelin/KernelSource.manifest|{}manifest[0]
+        final fun <get-manifest>(): io.github.rajumark.kernelin/KernelManifest // io.github.rajumark.kernelin/KernelSource.manifest.<get-manifest>|<get-manifest>(){}[0]
+    final val manifestJson // io.github.rajumark.kernelin/KernelSource.manifestJson|{}manifestJson[0]
+        final fun <get-manifestJson>(): kotlin/String // io.github.rajumark.kernelin/KernelSource.manifestJson.<get-manifestJson>|<get-manifestJson>(){}[0]
+    final val name // io.github.rajumark.kernelin/KernelSource.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.rajumark.kernelin/KernelSource.name.<get-name>|<get-name>(){}[0]
+    final val wgsl // io.github.rajumark.kernelin/KernelSource.wgsl|{}wgsl[0]
+        final fun <get-wgsl>(): kotlin/String // io.github.rajumark.kernelin/KernelSource.wgsl.<get-wgsl>|<get-wgsl>(){}[0]
+
+    final fun toString(): kotlin/String // io.github.rajumark.kernelin/KernelSource.toString|toString(){}[0]
+}
+
+final object io.github.rajumark.kernelin/KernelinCpu { // io.github.rajumark.kernelin/KernelinCpu|null[0]
+    final fun dispatch(kotlin/Int, kotlin/Function0<kotlin/Unit>) // io.github.rajumark.kernelin/KernelinCpu.dispatch|dispatch(kotlin.Int;kotlin.Function0<kotlin.Unit>){}[0]
+}
+
+final fun io.github.rajumark.kernelin/globalId(): kotlin/Int // io.github.rajumark.kernelin/globalId|globalId(){}[0]
+final fun io.github.rajumark.kernelin/kernelSource(kotlin.reflect/KFunction<*>): io.github.rajumark.kernelin/KernelSource // io.github.rajumark.kernelin/kernelSource|kernelSource(kotlin.reflect.KFunction<*>){}[0]

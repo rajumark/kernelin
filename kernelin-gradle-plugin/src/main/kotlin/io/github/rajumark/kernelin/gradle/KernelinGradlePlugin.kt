@@ -14,7 +14,7 @@ import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
  * - adds `kernelin-runtime` (`@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`);
  * - in Multiplatform projects with a `wasmJs` target, adds `kernelin-webgpu` to `wasmJsMain`.
  */
-class KernelinGradlePlugin : KotlinCompilerPluginSupportPlugin {
+public class KernelinGradlePlugin : KotlinCompilerPluginSupportPlugin {
     override fun apply(target: Project) {
         val runtime = "io.github.rajumark:kernelin-runtime:$KERNELIN_VERSION"
         val webgpu = "io.github.rajumark:kernelin-webgpu:$KERNELIN_VERSION"

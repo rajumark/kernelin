@@ -1,36 +1,47 @@
 package io.github.rajumark.kernelin
 
 /** What a GPU host needs to know to run a kernel: its buffers, scalar parameters and workgroup size. */
-class KernelManifest(
-    val kernel: String,
-    val entryPoint: String,
-    val workgroupSize: Int,
+public class KernelManifest(
+    /** Fully qualified Kotlin name of the kernel. */
+    public val kernel: String,
+    /** WGSL entry point of the compute shader (always `main`). */
+    public val entryPoint: String,
+    /** Threads per workgroup; hosts dispatch `ceil(size / workgroupSize)` workgroups. */
+    public val workgroupSize: Int,
     /** Kernel parameters in Kotlin order. */
-    val params: List<Param>,
+    public val params: List<Param>,
 ) {
-    class Param(
-        val name: String,
+    /** One kernel parameter: an array (storage buffer) or an Int/Float/Boolean (uniform field). */
+    public class Param(
+        /** Parameter name, as written in Kotlin (renamed only if it clashes with a WGSL keyword). */
+        public val name: String,
         /** `"buffer"` or `"scalar"`. */
-        val kind: String,
+        public val kind: String,
         /** Element/scalar type: `f32`, `i32`, or `bool` (a scalar sent as a u32 0/1 in the uniform). */
-        val type: String,
+        public val type: String,
         /** Bind group binding, for buffers. Binding 0 is always the uniform with the scalars. */
-        val binding: Int = -1,
+        public val binding: Int = -1,
         /** `"read"` or `"read_write"`, for buffers. */
-        val access: String = "",
+        public val access: String = "",
     ) {
-        val isBuffer get() = kind == "buffer"
-        val isWritten get() = access == "read_write"
+        /** True for an array (storage buffer) parameter. */
+        public val isBuffer: Boolean get() = kind == "buffer"
+        /** True when the kernel writes this buffer (it must be read back after a run). */
+        public val isWritten: Boolean get() = access == "read_write"
     }
 
-    val buffers: List<Param> get() = params.filter { it.isBuffer }
-    val scalars: List<Param> get() = params.filter { !it.isBuffer }
+    /** The array parameters, in Kotlin order. */
+    public val buffers: List<Param> get() = params.filter { it.isBuffer }
+    /** The Int/Float/Boolean parameters, in Kotlin order (the order of the uniform fields). */
+    public val scalars: List<Param> get() = params.filter { !it.isBuffer }
 
     /** Uniform size in bytes: `kernelin_size: u32` plus one 4-byte field per scalar, padded to 16. */
-    val uniformBytes: Int get() = (1 + scalars.size) * 4 + 15 and 15.inv()
+    public val uniformBytes: Int get() = (1 + scalars.size) * 4 + 15 and 15.inv()
 
-    companion object {
-        fun parse(json: String): KernelManifest {
+    /** Parses the manifests that the compiler plugin generates. */
+    public companion object {
+        /** Reads a manifest written by the Kernelin compiler plugin. Throws on malformed input. */
+        public fun parse(json: String): KernelManifest {
             @Suppress("UNCHECKED_CAST")
             val root = Json(json).parse() as Map<String, Any?>
             @Suppress("UNCHECKED_CAST")

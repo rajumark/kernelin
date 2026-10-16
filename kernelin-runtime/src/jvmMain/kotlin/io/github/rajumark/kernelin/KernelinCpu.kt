@@ -4,7 +4,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
 /** On the JVM, kernels can also run on all cores with [dispatchParallel]. */
-actual object KernelinCpu {
+public actual object KernelinCpu {
     // A mutable cell per thread avoids boxing an Int on every globalId() call.
     private class IdCell(var value: Int = -1)
 
@@ -23,7 +23,7 @@ actual object KernelinCpu {
     }
 
     /** Runs [kernel] once for every id in `0 until size`, on the calling thread. */
-    actual fun dispatch(size: Int, kernel: () -> Unit) {
+    public actual fun dispatch(size: Int, kernel: () -> Unit) {
         val cell = current.get()
         try {
             for (i in 0 until size) {
@@ -36,7 +36,7 @@ actual object KernelinCpu {
     }
 
     /** Like [dispatch], but splits the ids across all CPU cores. */
-    fun dispatchParallel(size: Int, kernel: () -> Unit) {
+    public fun dispatchParallel(size: Int, kernel: () -> Unit) {
         val workers = Runtime.getRuntime().availableProcessors().coerceAtMost(size.coerceAtLeast(1))
         val chunk = (size + workers - 1) / workers
         val futures = ArrayList<Future<*>>(workers)

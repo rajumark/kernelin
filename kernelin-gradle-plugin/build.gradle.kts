@@ -6,6 +6,10 @@ plugins {
 
 kotlin {
     jvmToolchain(21)
+    explicitApi()
+    // Public API is recorded in api/ and checked on every build, so a change can't break users by accident.
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation()
 }
 
 dependencies {

@@ -1,0 +1,31 @@
+name: Bug report
+description: A kernel gives a wrong result, doesn't compile, or Kernelin crashes
+labels: [bug]
+body:
+  - type: textarea
+    id: kernel
+    attributes:
+      label: Kernel
+      description: The smallest @Kernel function that shows the problem.
+      render: kotlin
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected
+      description: For wrong results, the CPU (KernelinCpu) and GPU outputs for a few elements.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      placeholder: "Kernelin 0.1.0, Kotlin 2.4.21, Gradle 9.6"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and browser or host
+      placeholder: "Apple M5, Chrome 152"

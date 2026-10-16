@@ -170,6 +170,32 @@ class WgslTranslationTest {
     }
 
     @Test
+    fun `constant expressions are computed with Kotlin rules`() {
+        val c = compileOk(
+            """
+            @Kernel
+            fun k(out: IntArray, f: FloatArray) {
+                val i = globalId()
+                out[i] = (-75 shl 28) + (Int.MAX_VALUE + 1) + (7 shl 33) + (if (3 > 2) 10 else 20)
+                f[i] = Float.MAX_VALUE * 2f + (0f / 0f) + sqrt(16f) + (1 shl 2).toFloat()
+            }
+            """,
+        )
+        val wgsl = c.wgsl("k")
+        // -75 shl 28 wraps to 1342177280; MAX_VALUE + 1 wraps to MIN_VALUE; 7 shl 33 == 7 shl 1 == 14.
+        assertContains(wgsl, "out[i] = 1342177294i;".replace("1342177294", (1342177280 + Int.MIN_VALUE + 14 + 10).toString()))
+        // Infinity and NaN can't be WGSL constants, so they read a runtime zero.
+        assertContains(wgsl, "var<private> kernelin_zero: u32;")
+        assertContains(wgsl, "bitcast<f32>(")
+    }
+
+    @Test
+    fun `constant integer division by zero is a compile error`() {
+        val c = compileError("@Kernel\nfun k(out: IntArray) { out[globalId()] = 5 / 0 }")
+        assertContains(c.errors.joinToString("\n"), "integer division by zero")
+    }
+
+    @Test
     fun `new features report clear errors when misused`() {
         val c = compileError(
             """

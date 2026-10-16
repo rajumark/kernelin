@@ -42,6 +42,8 @@ import org.jetbrains.kotlin.ir.types.isMarkedNullable
 import org.jetbrains.kotlin.ir.util.fileOrNull
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.util.kotlinFqName
+import kotlin.math.pow
+import kotlin.math.sign
 
 internal const val WORKGROUP_SIZE = 64
 
@@ -121,7 +123,84 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
     /** A helper that takes arrays is generated once per distinct set of kernel buffers passed to it. */
     private data class HelperKey(val function: IrSimpleFunction, val arrays: List<BufferParam>)
 
-    private data class Expr(val code: String, val type: WType)
+    /** A translated expression. [const] is its value when it's a compile-time constant (Int, Float or Boolean). */
+    private data class Expr(val code: String, val type: WType, val const: Any? = null)
+
+    private var usesSpecialFloats = false
+
+    /**
+     * WGSL literal for a value computed with Kotlin's rules. WGSL evaluates all-constant expressions at shader
+     * creation and rejects overflow, division by zero and non-finite floats there, while Kotlin wraps or produces
+     * Infinity/NaN, so Kernelin folds constants itself and only emits the result.
+     */
+    private fun lit(v: Any): Expr = when (v) {
+        is Int -> Expr(if (v == Int.MIN_VALUE) "(-2147483647i - 1i)" else "${v}i", WType.I32, v)
+        is Float -> if (v.isFinite()) {
+            Expr(floatLiteral(v), WType.F32, v)
+        } else {
+            // Not a constant to WGSL (it reads a private variable), so it may be Infinity or NaN.
+            usesSpecialFloats = true
+            Expr("bitcast<f32>(${java.lang.Float.floatToRawIntBits(v).toUInt()}u | kernelin_zero)", WType.F32, v)
+        }
+        is Boolean -> Expr(v.toString(), WType.BOOL, v)
+        else -> error("unexpected constant $v")
+    }
+
+    /** Kotlin's result for operator [name] on constants, or null when it can't be folded. */
+    private fun fold(name: String, r: Any, args: List<Any>): Any? {
+        val b = args.firstOrNull()
+        fun num(x: Any?) = x as? Number
+        return when (r) {
+            is Int -> when (name) {
+                "plus" -> when (b) { is Int -> r + b; is Float -> r + b; else -> null }
+                "minus" -> when (b) { is Int -> r - b; is Float -> r - b; else -> null }
+                "times" -> when (b) { is Int -> r * b; is Float -> r * b; else -> null }
+                "div" -> when (b) { is Int -> if (b == 0) null else r / b; is Float -> r / b; else -> null }
+                "rem" -> when (b) { is Int -> if (b == 0) null else r % b; is Float -> r % b; else -> null }
+                "and" -> (b as? Int)?.let { r and it }
+                "or" -> (b as? Int)?.let { r or it }
+                "xor" -> (b as? Int)?.let { r xor it }
+                "shl" -> (b as? Int)?.let { r shl it }
+                "shr" -> (b as? Int)?.let { r shr it }
+                "ushr" -> (b as? Int)?.let { r ushr it }
+                "inv" -> r.inv()
+                "unaryMinus" -> -r
+                "unaryPlus" -> r
+                "inc" -> r + 1
+                "dec" -> r - 1
+                "toInt" -> r
+                "toFloat" -> r.toFloat()
+                "compareTo" -> when (b) { is Int -> r.compareTo(b); is Float -> r.compareTo(b); else -> null }
+                "equals" -> r == b
+                else -> null
+            }
+            is Float -> when (name) {
+                "plus" -> num(b)?.let { r + it.toFloat() }
+                "minus" -> num(b)?.let { r - it.toFloat() }
+                "times" -> num(b)?.let { r * it.toFloat() }
+                "div" -> num(b)?.let { r / it.toFloat() }
+                "rem" -> num(b)?.let { r % it.toFloat() }
+                "unaryMinus" -> -r
+                "unaryPlus" -> r
+                "inc" -> r + 1f
+                "dec" -> r - 1f
+                "toInt" -> r.toInt()
+                "toFloat" -> r
+                "compareTo" -> num(b)?.let { r.compareTo(it.toFloat()) }
+                "equals" -> r == b
+                else -> null
+            }
+            is Boolean -> when (name) {
+                "not" -> !r
+                "and" -> (b as? Boolean)?.let { r and it }
+                "or" -> (b as? Boolean)?.let { r or it }
+                "xor" -> (b as? Boolean)?.let { r xor it }
+                "equals" -> r == b
+                else -> null
+            }
+            else -> null
+        }
+    }
 
     fun translate(): TranslationResult {
         checkKernelSignature()
@@ -143,6 +222,10 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             }
             appendLine()
             appendLine("var<private> kernelin_id: u32;")
+            if (usesSpecialFloats) {
+                // Always 0. Reading it keeps Infinity/NaN constants out of WGSL's compile-time evaluation.
+                appendLine("var<private> kernelin_zero: u32;")
+            }
             if (usesFloatToInt || usesFloatChecks) {
                 // Checked on the bits: GPU compilers may assume no NaNs and drop a plain `x != x`.
                 appendLine()
@@ -672,9 +755,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
         }
 
         private fun constant(c: IrConst): Expr = when (val v = c.value) {
-            is Int -> Expr(constant(v), WType.I32)
-            is Float -> if (v.isFinite()) Expr(floatLiteral(v), WType.F32) else fail(c, "NaN and infinite Float literals aren't supported")
-            is Boolean -> Expr(v.toString(), WType.BOOL)
+            is Int, is Float, is Boolean -> lit(v)
             is Double -> fail(c, "Double isn't supported on most GPUs; use Float (add an f suffix: 1.0f)")
             is Long -> fail(c, "Long isn't supported on the GPU; use Int")
             else -> fail(c, "this constant type isn't supported on the GPU")
@@ -712,12 +793,17 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 // a && b  ==  if (a) b else false
                 val l = expr(b[0].condition, pre)
                 val r = expr(b[0].result, pre)
+                if (l.const == false) return lit(false)
+                if (l.const == true) return r
+                if (r.const != null && l.const != null) return lit((l.const as Boolean) && (r.const as Boolean))
                 return Expr("(${cast(l, WType.BOOL)} && ${cast(r, WType.BOOL)})", WType.BOOL)
             }
             if (w.origin == IrStatementOrigin.OROR && b.size == 2) {
                 // a || b  ==  if (a) true else b
                 val l = expr(b[0].condition, pre)
                 val r = expr(b[1].result, pre)
+                if (l.const == true) return lit(true)
+                if (l.const == false) return r
                 return Expr("(${cast(l, WType.BOOL)} || ${cast(r, WType.BOOL)})", WType.BOOL)
             }
             val type = scalarType(w.type)
@@ -725,13 +811,19 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             val elseBranch = b.lastOrNull()?.takeIf { it is IrElseBranch || it.condition.isTrueConst() }
                 ?: return fail(w, "an if/when used as a value needs an else branch")
             // Both sides of select() are evaluated, which is fine because kernel expressions have no side effects.
-            var result = cast(expr(elseBranch.result, pre), type)
+            val elseValue = expr(elseBranch.result, pre)
+            var result = cast(elseValue, type)
+            var resultConst: Any? = elseValue.const.takeIf { elseValue.type == type }
             for (branch in b.dropLast(1).asReversed()) {
-                val cond = cast(expr(branch.condition, pre), WType.BOOL)
-                val value = cast(expr(branch.result, pre), type)
-                result = "select($result, $value, $cond)"
+                val cond = expr(branch.condition, pre)
+                val value = expr(branch.result, pre)
+                when (cond.const) {
+                    true -> { result = cast(value, type); resultConst = value.const.takeIf { value.type == type } }
+                    false -> Unit
+                    else -> { result = "select($result, ${cast(value, type)}, ${cast(cond, WType.BOOL)})"; resultConst = null }
+                }
             }
-            return Expr(result, type)
+            return resultConst?.let(::lit) ?: Expr(result, type)
         }
 
         private fun call(call: IrCall, pre: MutableList<String>): Expr {
@@ -776,8 +868,21 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             if (owner == "kotlin.math") return mathFunction(call, name, pre)
             if (owner == "kotlin.ranges" && name in setOf("coerceIn", "coerceAtLeast", "coerceAtMost")) {
                 val t = resultType ?: return fail(call, "unsupported coerce type")
-                val x = cast(expr(call.receiver()!!, pre), t)
-                val a = call.regularArgs().map { cast(expr(it, pre), t) }
+                val xe = expr(call.receiver()!!, pre)
+                val ae = call.regularArgs().map { expr(it, pre) }
+                if (xe.const is Number && ae.all { it.const is Number }) {
+                    val v = (listOf(xe) + ae).map { it.const as Number }
+                    val folded: Any? = if (t == WType.I32) {
+                        val n = v.map { it.toInt() }
+                        when (name) { "coerceIn" -> if (n[1] <= n[2]) n[0].coerceIn(n[1], n[2]) else null; "coerceAtLeast" -> n[0].coerceAtLeast(n[1]); else -> n[0].coerceAtMost(n[1]) }
+                    } else {
+                        val n = v.map { it.toFloat() }
+                        when (name) { "coerceIn" -> if (n[1] <= n[2]) n[0].coerceIn(n[1], n[2]) else null; "coerceAtLeast" -> n[0].coerceAtLeast(n[1]); else -> n[0].coerceAtMost(n[1]) }
+                    }
+                    folded?.let { return lit(it) }
+                }
+                val x = cast(xe, t)
+                val a = ae.map { cast(it, t) }
                 return when (name) {
                     "coerceIn" -> Expr("clamp($x, ${a[0]}, ${a[1]})", t)
                     "coerceAtLeast" -> Expr("max($x, ${a[0]})", t)
@@ -825,7 +930,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             if (value == null || !value.isFinite()) {
                 return fail(call, "Double isn't supported on most GPUs; use Float (only Double constants converted right away, like PI.toFloat(), are allowed)")
             }
-            return if (name == "toFloat") Expr(floatLiteral(value.toFloat()), WType.F32) else Expr(constant(value.toInt()), WType.I32)
+            return if (name == "toFloat") lit(value.toFloat()) else lit(value.toInt())
         }
 
         private fun builtinOperator(call: IrCall, name: String, pre: MutableList<String>): Expr {
@@ -839,6 +944,26 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             } else {
                 promote(expr(args[0], pre), expr(args[1], pre))
             }
+            if (l.const is Number && r.const is Number) {
+                val a = (l.const as Number).toFloat().takeIf { l.type == WType.F32 }
+                val cmp = if (l.type == WType.F32 || r.type == WType.F32) {
+                    (l.const as Number).toFloat().compareTo((r.const as Number).toFloat()).takeUnless {
+                        (a?.isNaN() == true) || (r.const as? Float)?.isNaN() == true
+                    }
+                } else {
+                    (l.const as Int).compareTo(r.const as Int)
+                }
+                val folded = when (name) {
+                    "less" -> cmp?.let { it < 0 } ?: false
+                    "lessOrEqual" -> cmp?.let { it <= 0 } ?: false
+                    "greater" -> cmp?.let { it > 0 } ?: false
+                    "greaterOrEqual" -> cmp?.let { it >= 0 } ?: false
+                    "EQEQ", "EQEQEQ", "ieee754equals" -> cmp?.let { it == 0 } ?: false
+                    else -> null
+                }
+                if (folded != null) return lit(folded)
+            }
+            if (l.const is Boolean && r.const is Boolean && name in setOf("EQEQ", "EQEQEQ")) return lit(l.const == r.const)
             val op = when (name) {
                 "less" -> "<"
                 "lessOrEqual" -> "<="
@@ -854,6 +979,12 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             val receiver = expr(call.receiver()!!, pre)
             val args = call.regularArgs().map { expr(it, pre) }
             val resultType = scalarType(call.type) ?: return fail(call, "operator result type ${call.type.describe()} isn't supported")
+            if (receiver.const != null && args.all { it.const != null }) {
+                if (name in setOf("div", "rem") && receiver.type == WType.I32 && args[0].const == 0) {
+                    return fail(call, "integer division by zero (Kotlin would throw ArithmeticException here)")
+                }
+                fold(name, receiver.const, args.map { it.const!! })?.let { return lit(it) }
+            }
             fun binary(op: String): Expr {
                 val t = if (resultType == WType.BOOL && receiver.type != WType.BOOL) promote(receiver, args[0]).first.type else resultType
                 return Expr("(${cast(receiver, t)} $op ${cast(args[0], t)})", resultType)
@@ -873,9 +1004,10 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 "xor" -> if (resultType == WType.BOOL) binary("!=") else binary("^")
                 "not" -> Expr("(!${receiver.code})", WType.BOOL)
                 "inv" -> Expr("(~${receiver.code})", WType.I32)
-                "shl" -> Expr("(${receiver.code} << u32(${args[0].code}))", WType.I32)
-                "shr" -> Expr("(${receiver.code} >> u32(${args[0].code}))", WType.I32)
-                "ushr" -> Expr("i32(u32(${receiver.code}) >> u32(${args[0].code}))", WType.I32)
+                // Kotlin uses only the low 5 bits of the shift count; say so explicitly for every GPU.
+                "shl" -> Expr("(${receiver.code} << (u32(${args[0].code}) & 31u))", WType.I32)
+                "shr" -> Expr("(${receiver.code} >> (u32(${args[0].code}) & 31u))", WType.I32)
+                "ushr" -> Expr("i32(u32(${receiver.code}) >> (u32(${args[0].code}) & 31u))", WType.I32)
                 "toInt" -> if (receiver.type == WType.F32) {
                     usesFloatToInt = true
                     Expr("kernelin_f2i(${receiver.code})", WType.I32)
@@ -902,6 +1034,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 return fail(call, "kotlin.math.$name with Double isn't supported on the GPU; use the Float version")
             }
             val args = allArgs.map { expr(it, pre) }
+            if (args.all { it.const is Number }) foldMath(name, args.map { it.const as Number }, resultType)?.let { return lit(it) }
             fun f(i: Int) = cast(args[i], WType.F32)
             fun t(i: Int) = cast(args[i], resultType)
             val floatOnly = mapOf(
@@ -921,6 +1054,36 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 "hypot" -> Expr("length(vec2<f32>(${f(0)}, ${f(1)}))", WType.F32)
                 "log10" -> Expr("(log(${f(0)}) * 0.4342944819f)", WType.F32)
                 else -> fail(call, "kotlin.math.$name isn't supported on the GPU yet")
+            }
+        }
+
+        /** kotlin.math on constants, computed with the Float versions Kotlin itself would call. */
+        private fun foldMath(name: String, a: List<Number>, resultType: WType): Any? {
+            val x = a[0].toFloat()
+            val y = a.getOrNull(1)?.toFloat()
+            if (resultType == WType.I32) {
+                val i = a[0].toInt()
+                val j = a.getOrNull(1)?.toInt()
+                return when (name) {
+                    "abs" -> kotlin.math.abs(i)
+                    "sign" -> i.sign
+                    "min" -> j?.let { kotlin.math.min(i, it) }
+                    "max" -> j?.let { kotlin.math.max(i, it) }
+                    else -> null
+                }
+            }
+            return when (name) {
+                "sqrt" -> kotlin.math.sqrt(x); "sin" -> kotlin.math.sin(x); "cos" -> kotlin.math.cos(x)
+                "tan" -> kotlin.math.tan(x); "asin" -> kotlin.math.asin(x); "acos" -> kotlin.math.acos(x)
+                "atan" -> kotlin.math.atan(x); "sinh" -> kotlin.math.sinh(x); "cosh" -> kotlin.math.cosh(x)
+                "tanh" -> kotlin.math.tanh(x); "exp" -> kotlin.math.exp(x); "ln" -> kotlin.math.ln(x)
+                "log2" -> kotlin.math.log2(x); "log10" -> kotlin.math.log10(x); "floor" -> kotlin.math.floor(x)
+                "ceil" -> kotlin.math.ceil(x); "round" -> kotlin.math.round(x); "truncate" -> kotlin.math.truncate(x)
+                "abs" -> kotlin.math.abs(x); "sign" -> kotlin.math.sign(x)
+                "min" -> y?.let { kotlin.math.min(x, it) }; "max" -> y?.let { kotlin.math.max(x, it) }
+                "atan2" -> y?.let { kotlin.math.atan2(x, it) }; "pow" -> y?.let { x.pow(it) }
+                "hypot" -> y?.let { kotlin.math.hypot(x, it) }
+                else -> null
             }
         }
 

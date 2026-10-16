@@ -8,11 +8,11 @@ package io.github.rajumark.kernelin
  */
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.BINARY)
-annotation class Kernel
+public annotation class Kernel
 
 /**
  * Index of the current thread inside a dispatch.
  *
  * On the GPU this is `global_invocation_id.x`. On the CPU it is set by [KernelinCpu.dispatch].
  */
-fun globalId(): Int = KernelinCpu.currentId()
+public fun globalId(): Int = KernelinCpu.currentId()

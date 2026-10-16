@@ -1,0 +1,51 @@
+// Klib ABI Dump
+// Targets: [wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.rajumark:kernelin-webgpu>
+final class io.github.rajumark.kernelin.webgpu/GpuData { // io.github.rajumark.kernelin.webgpu/GpuData|null[0]
+    final object Companion { // io.github.rajumark.kernelin.webgpu/GpuData.Companion|null[0]
+        final fun empty(kotlin/Int): io.github.rajumark.kernelin.webgpu/GpuData // io.github.rajumark.kernelin.webgpu/GpuData.Companion.empty|empty(kotlin.Int){}[0]
+        final fun of(kotlin/FloatArray): io.github.rajumark.kernelin.webgpu/GpuData // io.github.rajumark.kernelin.webgpu/GpuData.Companion.of|of(kotlin.FloatArray){}[0]
+        final fun of(kotlin/IntArray): io.github.rajumark.kernelin.webgpu/GpuData // io.github.rajumark.kernelin.webgpu/GpuData.Companion.of|of(kotlin.IntArray){}[0]
+        final fun ofJs(kotlin.js/JsAny): io.github.rajumark.kernelin.webgpu/GpuData // io.github.rajumark.kernelin.webgpu/GpuData.Companion.ofJs|ofJs(kotlin.js.JsAny){}[0]
+    }
+}
+
+final class io.github.rajumark.kernelin.webgpu/GpuKernel { // io.github.rajumark.kernelin.webgpu/GpuKernel|null[0]
+    final val manifest // io.github.rajumark.kernelin.webgpu/GpuKernel.manifest|{}manifest[0]
+        final fun <get-manifest>(): io.github.rajumark.kernelin/KernelManifest // io.github.rajumark.kernelin.webgpu/GpuKernel.manifest.<get-manifest>|<get-manifest>(){}[0]
+    final val source // io.github.rajumark.kernelin.webgpu/GpuKernel.source|{}source[0]
+        final fun <get-source>(): io.github.rajumark.kernelin/KernelSource // io.github.rajumark.kernelin.webgpu/GpuKernel.source.<get-source>|<get-source>(){}[0]
+
+    final suspend fun run(kotlin/Int, kotlin.collections/Map<kotlin/String, kotlin/Any> = ..., kotlin.collections/Map<kotlin/String, io.github.rajumark.kernelin.webgpu/GpuData>): io.github.rajumark.kernelin.webgpu/GpuResult // io.github.rajumark.kernelin.webgpu/GpuKernel.run|run(kotlin.Int;kotlin.collections.Map<kotlin.String,kotlin.Any>;kotlin.collections.Map<kotlin.String,io.github.rajumark.kernelin.webgpu.GpuData>){}[0]
+}
+
+final class io.github.rajumark.kernelin.webgpu/GpuResult { // io.github.rajumark.kernelin.webgpu/GpuResult|null[0]
+    final val millis // io.github.rajumark.kernelin.webgpu/GpuResult.millis|{}millis[0]
+        final fun <get-millis>(): kotlin/Double // io.github.rajumark.kernelin.webgpu/GpuResult.millis.<get-millis>|<get-millis>(){}[0]
+
+    final fun floats(kotlin/String): kotlin/FloatArray // io.github.rajumark.kernelin.webgpu/GpuResult.floats|floats(kotlin.String){}[0]
+    final fun ints(kotlin/String): kotlin/IntArray // io.github.rajumark.kernelin.webgpu/GpuResult.ints|ints(kotlin.String){}[0]
+    final fun js(kotlin/String): kotlin.js/JsAny // io.github.rajumark.kernelin.webgpu/GpuResult.js|js(kotlin.String){}[0]
+}
+
+final class io.github.rajumark.kernelin.webgpu/WebGpu { // io.github.rajumark.kernelin.webgpu/WebGpu|null[0]
+    final val description // io.github.rajumark.kernelin.webgpu/WebGpu.description|{}description[0]
+        final fun <get-description>(): kotlin/String // io.github.rajumark.kernelin.webgpu/WebGpu.description.<get-description>|<get-description>(){}[0]
+
+    final suspend fun load(io.github.rajumark.kernelin/KernelSource): io.github.rajumark.kernelin.webgpu/GpuKernel // io.github.rajumark.kernelin.webgpu/WebGpu.load|load(io.github.rajumark.kernelin.KernelSource){}[0]
+
+    final object Companion { // io.github.rajumark.kernelin.webgpu/WebGpu.Companion|null[0]
+        final val isSupported // io.github.rajumark.kernelin.webgpu/WebGpu.Companion.isSupported|{}isSupported[0]
+            final fun <get-isSupported>(): kotlin/Boolean // io.github.rajumark.kernelin.webgpu/WebGpu.Companion.isSupported.<get-isSupported>|<get-isSupported>(){}[0]
+
+        final suspend fun create(): io.github.rajumark.kernelin.webgpu/WebGpu // io.github.rajumark.kernelin.webgpu/WebGpu.Companion.create|create(){}[0]
+    }
+}
+
+final fun (kotlin/FloatArray).io.github.rajumark.kernelin.webgpu/toJsFloat32Array(): kotlin.js/JsAny // io.github.rajumark.kernelin.webgpu/toJsFloat32Array|toJsFloat32Array@kotlin.FloatArray(){}[0]
+final fun (kotlin/IntArray).io.github.rajumark.kernelin.webgpu/toJsInt32Array(): kotlin.js/JsAny // io.github.rajumark.kernelin.webgpu/toJsInt32Array|toJsInt32Array@kotlin.IntArray(){}[0]

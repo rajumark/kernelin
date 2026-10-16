@@ -45,6 +45,15 @@ jobs:
           KERNELIN_REQUIRE_GPU: "1"
         run: ./gradlew build --stacktrace
 
+      # Fresh random kernels on every run (seed = run number, so a failure can be replayed locally).
+      - name: Fuzz 300 random kernels on CPU and GPU
+        env:
+          KERNELIN_REQUIRE_GPU: "1"
+        run: ./gradlew :kernelin-compiler-plugin:test --tests '*KernelFuzzTest*' -Pkernelin.fuzz.count=300 -Pkernelin.fuzz.seed=${{ github.run_number }}000
+
+      - name: Coverage report and minimum
+        run: ./gradlew koverXmlReport koverVerify
+
       - name: Incremental builds pick up kernel changes
         run: scripts/check-incremental.sh
 

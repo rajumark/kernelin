@@ -6,11 +6,12 @@ package io.github.rajumark.kernelin
  * The plugin writes `kernelin/<fq.name>.wgsl` and `kernelin/<fq.name>.json` into the
  * compilation's resources, so they ship inside the jar next to the compiled code.
  */
-object KernelinShaders {
-    fun wgsl(kernelFqName: String): String = read("kernelin/$kernelFqName.wgsl")
+public object KernelinShaders {
+    /** The WGSL generated for the kernel with this fully qualified name. */
+    public fun wgsl(kernelFqName: String): String = read("kernelin/$kernelFqName.wgsl")
 
     /** JSON description of the kernel's buffers and parameters, used by GPU hosts. */
-    fun manifest(kernelFqName: String): String = read("kernelin/$kernelFqName.json")
+    public fun manifest(kernelFqName: String): String = read("kernelin/$kernelFqName.json")
 
     private fun read(path: String): String {
         val stream = KernelinShaders::class.java.classLoader.getResourceAsStream(path)

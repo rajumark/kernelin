@@ -1,7 +1,7 @@
 package io.github.rajumark.kernelin
 
 /** Wasm runs on one thread, so the current id is a plain field. */
-actual object KernelinCpu {
+public actual object KernelinCpu {
     private var current = -1
 
     internal actual fun currentId(): Int {
@@ -9,7 +9,8 @@ actual object KernelinCpu {
         return current
     }
 
-    actual fun dispatch(size: Int, kernel: () -> Unit) {
+    /** Runs [kernel] once for every id in `0 until size`. */
+    public actual fun dispatch(size: Int, kernel: () -> Unit) {
         try {
             for (i in 0 until size) {
                 current = i

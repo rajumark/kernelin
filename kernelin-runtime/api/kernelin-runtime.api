@@ -1,0 +1,60 @@
+public abstract interface annotation class io/github/rajumark/kernelin/Kernel : java/lang/annotation/Annotation {
+}
+
+public final class io/github/rajumark/kernelin/KernelKt {
+	public static final fun globalId ()I
+}
+
+public final class io/github/rajumark/kernelin/KernelManifest {
+	public static final field Companion Lio/github/rajumark/kernelin/KernelManifest$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/List;)V
+	public final fun getBuffers ()Ljava/util/List;
+	public final fun getEntryPoint ()Ljava/lang/String;
+	public final fun getKernel ()Ljava/lang/String;
+	public final fun getParams ()Ljava/util/List;
+	public final fun getScalars ()Ljava/util/List;
+	public final fun getUniformBytes ()I
+	public final fun getWorkgroupSize ()I
+}
+
+public final class io/github/rajumark/kernelin/KernelManifest$Companion {
+	public final fun parse (Ljava/lang/String;)Lio/github/rajumark/kernelin/KernelManifest;
+}
+
+public final class io/github/rajumark/kernelin/KernelManifest$Param {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAccess ()Ljava/lang/String;
+	public final fun getBinding ()I
+	public final fun getKind ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getType ()Ljava/lang/String;
+	public final fun isBuffer ()Z
+	public final fun isWritten ()Z
+}
+
+public final class io/github/rajumark/kernelin/KernelSource {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun getManifest ()Lio/github/rajumark/kernelin/KernelManifest;
+	public final fun getManifestJson ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getWgsl ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/rajumark/kernelin/KernelSourceKt {
+	public static final fun kernelSource (Lkotlin/reflect/KFunction;)Lio/github/rajumark/kernelin/KernelSource;
+}
+
+public final class io/github/rajumark/kernelin/KernelinCpu {
+	public static final field INSTANCE Lio/github/rajumark/kernelin/KernelinCpu;
+	public final fun dispatch (ILkotlin/jvm/functions/Function0;)V
+	public final fun dispatchParallel (ILkotlin/jvm/functions/Function0;)V
+}
+
+public final class io/github/rajumark/kernelin/KernelinShaders {
+	public static final field INSTANCE Lio/github/rajumark/kernelin/KernelinShaders;
+	public final fun manifest (Ljava/lang/String;)Ljava/lang/String;
+	public final fun wgsl (Ljava/lang/String;)Ljava/lang/String;
+}
+

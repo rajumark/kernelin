@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.vanniktech.maven.publish)
+    alias(libs.plugins.kover)
 }
 
 kotlin {
@@ -37,7 +38,9 @@ tasks.test {
         listOf(
             "-Dkernelin.pluginJar=${pluginJar.get().asFile.absolutePath}",
             "-Dkernelin.gpuRunner=${gpuRunner.asFile.absolutePath}",
-        )
+        ) + listOf("kernelin.fuzz.count", "kernelin.fuzz.seed").mapNotNull { key ->
+            providers.gradleProperty(key).orNull?.let { "-D$key=$it" }
+        }
     })
     // Differences between CPU and GPU must never be served from the build cache without running.
     outputs.upToDateWhen { false }

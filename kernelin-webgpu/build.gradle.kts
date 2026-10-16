@@ -6,6 +6,11 @@ plugins {
 }
 
 kotlin {
+    // Library API: everything public must be declared public on purpose, with an explicit type.
+    explicitApi()
+    // Public API is recorded in api/ and checked on every build, so a change can't break users by accident.
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation()
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser {

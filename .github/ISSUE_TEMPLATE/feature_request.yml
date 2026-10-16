@@ -1,0 +1,17 @@
+name: Feature request
+description: Kotlin you'd like to use in kernels, or a new platform or API
+labels: [enhancement]
+body:
+  - type: textarea
+    id: kernel
+    attributes:
+      label: The Kotlin you want to write
+      render: kotlin
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What it's for
+    validations:
+      required: true

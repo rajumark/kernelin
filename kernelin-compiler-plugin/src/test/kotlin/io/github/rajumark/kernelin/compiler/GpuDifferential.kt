@@ -53,11 +53,20 @@ object GpuDifferential {
      * and returns both sets of outputs. [args] holds every parameter by name: arrays are inputs (copied for each
      * side), Int/Float/Boolean are scalars.
      */
-    fun run(source: String, kernel: String, size: Int, args: Map<String, Any>): Result {
+    fun run(source: String, kernel: String, size: Int, args: Map<String, Any>): Result =
+        run(compile(source), kernel, size, args)
+
+    /** Compiles [source] (Kernelin and kotlin.math imports added) and validates every shader with naga. */
+    fun compile(source: String): Compilation {
         requireGpu()
         val c = KernelinCompiler.compile("import io.github.rajumark.kernelin.*\nimport kotlin.math.*\n\n$source")
-        if (!c.ok) fail("Compilation failed:\n${c.output}")
+        if (!c.ok) fail("Compilation failed:\n${c.output}\n--- source ---\n$source")
         c.wgslFiles().forEach(Naga::validate)
+        return c
+    }
+
+    /** Runs one kernel of an already compiled [c] on the CPU and the GPU. */
+    fun run(c: Compilation, kernel: String, size: Int, args: Map<String, Any>): Result {
         val manifest = KernelManifest.parse(c.manifest(kernel))
 
         // CPU: the very same Kotlin function, called once per id.
@@ -103,8 +112,19 @@ object GpuDifferential {
         absTol: Double = 1e-6,
         relTol: Double = 1e-5,
         mismatchFraction: Double = 0.0,
+    ): Result = assertSame(compile(source), kernel, size, args, absTol, relTol, mismatchFraction)
+
+    /** Like [assertSame] for a kernel of an already compiled [c]. */
+    fun assertSame(
+        c: Compilation,
+        kernel: String,
+        size: Int,
+        args: Map<String, Any>,
+        absTol: Double = 1e-6,
+        relTol: Double = 1e-5,
+        mismatchFraction: Double = 0.0,
     ): Result {
-        val r = run(source, kernel, size, args)
+        val r = run(c, kernel, size, args)
         for ((name, cpuValue) in r.cpu) {
             val gpuValue = r.gpu.getValue(name)
             val n = length(cpuValue)

@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+New in kernels:
+- `x in a..b`, `until`, `..<`, `downTo`, `!in`, and `when (x) { in a..b -> }`, for Int and Float.
+- `repeat(n) { }`, including `return@repeat` and `break` / `continue` to an outer loop from inside it.
+- Labeled `break@outer` / `continue@outer` across any number of nested loops.
+- `Boolean` kernel parameters.
+- `FloatArray` / `IntArray` parameters in your own helper functions.
+- `PI.toFloat()`, `E.toFloat()` and other `Double` constants converted right away.
+- `Float.isNaN()`, `isInfinite()`, `isFinite()`.
+
+Fixes (the GPU now matches Kotlin in all of these):
+- Calls to helpers that return `Unit` were left out of the shader.
+- `Float.toInt()`: NaN gives 0, out-of-range values give `Int.MIN_VALUE` / `Int.MAX_VALUE`.
+- Shift counts use only their low 5 bits, as in Kotlin, on every GPU.
+- Constant expressions are computed with Kotlin's rules (wrapping, Infinity/NaN). Before, WGSL rejected
+  shaders where an all-constant expression overflowed, e.g. `-75 shl 28`.
+- JVM: `kernelSource()` reads the shader shipped next to the kernel, so an incremental build never keeps a
+  stale copy.
+- Constant integer division by zero is a compile error (Kotlin would throw).
+
+API:
+- `GpuKernel.run(scalars = …)` takes `Map<String, Any>` (was `Map<String, Number>`) so Booleans fit. Source
+  compatible; Wasm libraries compiled against 0.1.0 that call `run()` need a recompile.
+- The public API of every module is now checked on every build (`api/` files), documented, and declared
+  explicitly (explicit API mode).
+
+Testing:
+- GPU-vs-CPU differential tests (WebGPU through Deno) for every feature, in CI on a software GPU.
+- A fuzzer: random valid kernels must give identical results on CPU and GPU (40 per build, 2,000 before this
+  release, 300 more on every CI run).
+- Code coverage with Kover (86%), and the build fails below 80%.
+
 ## 0.1.0 (2026-10-15)
 
 First release.

@@ -16,12 +16,14 @@ import kotlin.js.Promise
  * val result = kernel.run(size = w * h, scalars = mapOf("width" to w, ...), buffers = mapOf("out" to GpuData.empty(w * h)))
  * ```
  */
-class WebGpu private constructor(internal val device: JsAny, val description: String) {
-    companion object {
+public class WebGpu private constructor(internal val device: JsAny, public val description: String) {
+    /** Entry point: check [isSupported], then [create]. */
+    public companion object {
         /** True when this browser exposes WebGPU (`navigator.gpu`). */
-        val isSupported: Boolean get() = gpuSupported()
+        public val isSupported: Boolean get() = gpuSupported()
 
-        suspend fun create(): WebGpu {
+        /** Requests a high-performance GPU adapter and device. Throws if WebGPU is unavailable. */
+        public suspend fun create(): WebGpu {
             if (!isSupported) throw UnsupportedOperationException("WebGPU is not available in this browser")
             val device = requestDevice().await<JsAny>()
             return WebGpu(device, deviceDescription(device))
@@ -29,7 +31,7 @@ class WebGpu private constructor(internal val device: JsAny, val description: St
     }
 
     /** Compiles the kernel's WGSL and builds its pipeline. Throws if the browser rejects the shader. */
-    suspend fun load(source: KernelSource): GpuKernel {
+    public suspend fun load(source: KernelSource): GpuKernel {
         val module = createShaderModule(device, source.wgsl)
         val errors = compilationErrors(module).await<JsString>().toString()
         if (errors.isNotEmpty()) throw IllegalArgumentException("WGSL for ${source.name} was rejected: $errors")
@@ -38,39 +40,43 @@ class WebGpu private constructor(internal val device: JsAny, val description: St
 }
 
 /** Input/output data for one kernel buffer. */
-class GpuData private constructor(internal val js: JsAny?, internal val length: Int, internal val isInt: Boolean) {
-    companion object {
+public class GpuData private constructor(internal val js: JsAny?, internal val length: Int, internal val isInt: Boolean) {
+    /** Ways to create buffer data. */
+    public companion object {
         /** A zero-filled buffer of [length] elements, not uploaded (for outputs). */
-        fun empty(length: Int) = GpuData(null, length, isInt = false)
+        public fun empty(length: Int): GpuData = GpuData(null, length, isInt = false)
 
-        fun of(values: IntArray) = GpuData(values.toJsInt32Array(), values.size, isInt = true)
+        /** Copies an IntArray for upload (an `i32` buffer). */
+        public fun of(values: IntArray): GpuData = GpuData(values.toJsInt32Array(), values.size, isInt = true)
 
-        fun of(values: FloatArray) = GpuData(values.toJsFloat32Array(), values.size, isInt = false)
+        /** Copies a FloatArray for upload (an `f32` buffer). */
+        public fun of(values: FloatArray): GpuData = GpuData(values.toJsFloat32Array(), values.size, isInt = false)
 
         /** Wraps an existing JS `Int32Array` / `Float32Array` without copying. */
-        fun ofJs(typedArray: JsAny) = GpuData(typedArray, typedArrayLength(typedArray), isInt = false)
+        public fun ofJs(typedArray: JsAny): GpuData = GpuData(typedArray, typedArrayLength(typedArray), isInt = false)
     }
 }
 
 /** Results of one GPU run: every `read_write` buffer, as JS typed arrays. */
-class GpuResult internal constructor(
+public class GpuResult internal constructor(
     /** Milliseconds from upload until results were back in memory. */
-    val millis: Double,
+    public val millis: Double,
     private val outputs: Map<String, JsAny>,
 ) {
     /** The raw JS typed array (`Int32Array` or `Float32Array`); no copy. */
-    fun js(name: String): JsAny = outputs[name] ?: error("No output buffer named '$name'")
+    public fun js(name: String): JsAny = outputs[name] ?: error("No output buffer named '$name'")
 
     /** Copies an `i32` output into a Kotlin [IntArray]. */
-    fun ints(name: String): IntArray = js(name).let { a -> IntArray(typedArrayLength(a)) { readInt(a, it) } }
+    public fun ints(name: String): IntArray = js(name).let { a -> IntArray(typedArrayLength(a)) { readInt(a, it) } }
 
     /** Copies an `f32` output into a Kotlin [FloatArray]. */
-    fun floats(name: String): FloatArray = js(name).let { a -> FloatArray(typedArrayLength(a)) { readFloat(a, it).toFloat() } }
+    public fun floats(name: String): FloatArray = js(name).let { a -> FloatArray(typedArrayLength(a)) { readFloat(a, it).toFloat() } }
 }
 
 /** A compiled kernel. GPU buffers are reused between runs and only reallocated when sizes change. */
-class GpuKernel internal constructor(private val gpu: WebGpu, val source: KernelSource, module: JsAny) {
-    val manifest: KernelManifest = source.manifest
+public class GpuKernel internal constructor(private val gpu: WebGpu, public val source: KernelSource, module: JsAny) {
+    /** The kernel's parameters and workgroup size. */
+    public val manifest: KernelManifest = source.manifest
     private val device = gpu.device
     private val layout: JsAny
     private val pipeline: JsAny
@@ -92,7 +98,7 @@ class GpuKernel internal constructor(private val gpu: WebGpu, val source: Kernel
      * Runs the kernel for ids `0 until size`. [scalars] holds every Int/Float/Boolean parameter by name;
      * [buffers] holds every array parameter by name.
      */
-    suspend fun run(size: Int, scalars: Map<String, Any> = emptyMap(), buffers: Map<String, GpuData>): GpuResult {
+    public suspend fun run(size: Int, scalars: Map<String, Any> = emptyMap(), buffers: Map<String, GpuData>): GpuResult {
         val view = newDataView(manifest.uniformBytes)
         setUint32(view, 0, size)
         manifest.scalars.forEachIndexed { i, p ->
@@ -247,6 +253,7 @@ private fun writeInt(array: JsAny, index: Int, value: Int): Unit = js("{ array[i
 private fun writeFloat(array: JsAny, index: Int, value: Double): Unit = js("{ array[index] = value; }")
 
 /** Copies into a JS typed array (Wasm GC arrays live outside JS memory, so this is element by element). */
-fun IntArray.toJsInt32Array(): JsAny = newInt32Array(size).also { a -> for (i in indices) writeInt(a, i, this[i]) }
+public fun IntArray.toJsInt32Array(): JsAny = newInt32Array(size).also { a -> for (i in indices) writeInt(a, i, this[i]) }
 
-fun FloatArray.toJsFloat32Array(): JsAny = newFloat32Array(size).also { a -> for (i in indices) writeFloat(a, i, this[i].toDouble()) }
+/** Copies into a JS `Float32Array`. */
+public fun FloatArray.toJsFloat32Array(): JsAny = newFloat32Array(size).also { a -> for (i in indices) writeFloat(a, i, this[i].toDouble()) }
