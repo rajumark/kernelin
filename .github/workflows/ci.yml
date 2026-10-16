@@ -30,8 +30,23 @@ jobs:
         if: steps.naga-cache.outputs.cache-hit != 'true'
         run: cargo install naga-cli --version 30.0.1 --locked
 
-      - name: Build and test
+      # GPU differential tests run every test kernel on the CPU and, through WebGPU in Deno, on a GPU.
+      # CI machines have no GPU, so lavapipe (Mesa's software Vulkan driver) plays the GPU.
+      - name: Install software GPU (lavapipe)
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check WebGPU sees a GPU
+        run: deno run --unstable-webgpu --allow-read --allow-write --allow-env kernelin-compiler-plugin/src/test/js/gpu-run.mjs --probe
+
+      - name: Build and test (GPU tests required)
+        env:
+          KERNELIN_REQUIRE_GPU: "1"
         run: ./gradlew build --stacktrace
+
+      - name: Incremental builds pick up kernel changes
+        run: scripts/check-incremental.sh
 
       - name: Example - plain JVM project using the Gradle plugin
         working-directory: examples/hello-jvm

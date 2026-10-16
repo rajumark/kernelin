@@ -12,7 +12,7 @@ class KernelManifest(
         val name: String,
         /** `"buffer"` or `"scalar"`. */
         val kind: String,
-        /** WGSL element/scalar type: `f32`, `i32` or `u32`. */
+        /** Element/scalar type: `f32`, `i32`, or `bool` (a scalar sent as a u32 0/1 in the uniform). */
         val type: String,
         /** Bind group binding, for buffers. Binding 0 is always the uniform with the scalars. */
         val binding: Int = -1,

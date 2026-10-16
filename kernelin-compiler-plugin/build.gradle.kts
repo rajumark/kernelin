@@ -25,7 +25,16 @@ tasks.test {
     // Tests run the real Kotlin compiler with the packaged plugin jar, like a user's build would.
     val pluginJar = tasks.jar.flatMap { it.archiveFile }
     inputs.file(pluginJar)
+    // GPU differential tests run the generated WGSL through this Deno script (skipped without Deno/GPU).
+    val gpuRunner = layout.projectDirectory.file("src/test/js/gpu-run.mjs")
+    inputs.file(gpuRunner)
     jvmArgumentProviders.add(CommandLineArgumentProvider {
-        listOf("-Dkernelin.pluginJar=${pluginJar.get().asFile.absolutePath}")
+        listOf(
+            "-Dkernelin.pluginJar=${pluginJar.get().asFile.absolutePath}",
+            "-Dkernelin.gpuRunner=${gpuRunner.asFile.absolutePath}",
+        )
     })
+    // Differences between CPU and GPU must never be served from the build cache without running.
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
 }

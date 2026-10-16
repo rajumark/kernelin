@@ -150,6 +150,44 @@ class WgslTranslationTest {
         assertContains(c.errors.joinToString("\n"), "'plain' isn't annotated with @Kernel")
     }
 
+    @Test
+    fun `labeled jumps become flags and repeat becomes a for loop`() {
+        val c = compileOk(
+            """
+            @Kernel
+            fun k(out: IntArray) {
+                var s = 0
+                outer@ for (a in 0 until 3) { for (b in 0 until 3) { if (b == a) continue@outer; s += b } }
+                repeat(4) { if (it == 2) return@repeat; s += it }
+                out[globalId()] = s
+            }
+            """,
+        )
+        val wgsl = c.wgsl("k")
+        assertContains(wgsl, "var kernelin_continue: bool = false;")
+        assertContains(wgsl, "if (kernelin_continue) { kernelin_continue = false; continue; }")
+        assertContains(wgsl, "for (var it: i32 = 0i; it < kernelin_end_2; it = it + 1i)")
+    }
+
+    @Test
+    fun `new features report clear errors when misused`() {
+        val c = compileError(
+            """
+            @Kernel
+            fun k(out: FloatArray, n: Int) {
+                val i = globalId()
+                if (i in 0..10 step 2) out[i] = 1f
+                val d = out[i].toDouble()
+                out[i] = d.toFloat()
+            }
+            """,
+        )
+        val text = c.errors.joinToString("\n")
+        assertContains(text, "'in' supports ranges written in place")
+        assertContains(text, "variable 'd' has type Double")
+        assertContains(text, "only Double constants converted right away")
+    }
+
     // ------------------------------------------------------------------ errors
 
     private fun compileError(source: String): Compilation {
@@ -192,7 +230,7 @@ class WgslTranslationTest {
             """,
         )
         val text = c.errors.joinToString("\n")
-        assertContains(text, "kernels accept FloatArray, IntArray, Int and Float")
+        assertContains(text, "kernels accept FloatArray, IntArray, Int, Float and Boolean")
         assertContains(text, "must return Unit")
     }
 
@@ -205,9 +243,9 @@ class WgslTranslationTest {
             @Kernel
             fun bad(out: FloatArray) {
                 val d = 1.0
-                repeat(3) { out[it] = 0f }
+                run { out[0] = 2f }
                 out[0] = fact(3).toFloat()
-                outer@ for (a in 0 until 3) { for (b in 0 until 3) { if (b == 1) break@outer } }
+                val r = if (out[0] > 1f) "yes" else "no"
             }
             """,
         )
@@ -215,7 +253,7 @@ class WgslTranslationTest {
         assertContains(text, "Double isn't supported")
         assertContains(text, "lambdas aren't supported")
         assertContains(text, "recursion isn't allowed")
-        assertContains(text, "outer loop label")
+        assertContains(text, "strings aren't supported")
         assertTrue(c.errors.size >= 4, text)
     }
 }

@@ -89,15 +89,20 @@ class GpuKernel internal constructor(private val gpu: WebGpu, val source: Kernel
     }
 
     /**
-     * Runs the kernel for ids `0 until size`. [scalars] holds every Int/Float parameter by name;
+     * Runs the kernel for ids `0 until size`. [scalars] holds every Int/Float/Boolean parameter by name;
      * [buffers] holds every array parameter by name.
      */
-    suspend fun run(size: Int, scalars: Map<String, Number> = emptyMap(), buffers: Map<String, GpuData>): GpuResult {
+    suspend fun run(size: Int, scalars: Map<String, Any> = emptyMap(), buffers: Map<String, GpuData>): GpuResult {
         val view = newDataView(manifest.uniformBytes)
         setUint32(view, 0, size)
         manifest.scalars.forEachIndexed { i, p ->
             val v = scalars[p.name] ?: throw IllegalArgumentException("Missing scalar parameter '${p.name}'")
-            if (p.type == "f32") setFloat32(view, 4 + i * 4, v.toDouble()) else setInt32(view, 4 + i * 4, v.toInt())
+            val offset = 4 + i * 4
+            when (p.type) {
+                "f32" -> setFloat32(view, offset, (v as Number).toDouble())
+                "bool" -> setUint32(view, offset, if (v as Boolean) 1 else 0)
+                else -> setInt32(view, offset, (v as Number).toInt())
+            }
         }
         writeBuffer(device, uniform, dataViewBuffer(view))
 

@@ -59,7 +59,9 @@ async function runCase(device, c) {
   dv.setUint32(0, c.size, true);
   scalars.forEach((s, i) => {
     const v = c.scalars[s.name];
-    if (s.type === 'f32') dv.setFloat32(4 + i * 4, v, true); else dv.setInt32(4 + i * 4, v, true);
+    if (s.type === 'f32') dv.setFloat32(4 + i * 4, v, true);
+    else if (s.type === 'bool') dv.setUint32(4 + i * 4, v ? 1 : 0, true);
+    else dv.setInt32(4 + i * 4, v, true);
   });
   const uniform = device.createBuffer({ size: uniformBytes, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   device.queue.writeBuffer(uniform, 0, uniformData);

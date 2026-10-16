@@ -50,6 +50,10 @@ internal enum class WType(val wgsl: String, val kotlin: String) {
     F32("f32", "Float"),
     BOOL("bool", "Boolean"),
     UNIT("", "Unit"),
+    ;
+
+    /** Type of this value inside the uniform buffer: bool isn't host-shareable, so it's a u32 (0 or 1). */
+    val uniformWgsl: String get() = if (this == BOOL) "u32" else wgsl
 }
 
 internal class KernelError(val element: IrElement, val message: String, val file: IrFile?)
@@ -78,7 +82,7 @@ internal class WgslShader(
         appendLine("  \"workgroupSize\": $WORKGROUP_SIZE,")
         appendLine("  \"uniform\": { \"binding\": 0, \"fields\": [")
         val fields = listOf("{ \"name\": \"kernelin_size\", \"type\": \"u32\" }") +
-            scalars.map { "{ \"name\": \"${it.name}\", \"type\": \"${it.type.wgsl}\" }" }
+            scalars.map { "{ \"name\": \"${it.name}\", \"type\": \"${it.type.uniformWgsl}\" }" }
         appendLine(fields.joinToString(",\n") { "    $it" })
         appendLine("  ] },")
         appendLine("  \"params\": [")
@@ -107,10 +111,15 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
     private val buffers = LinkedHashMap<IrValueParameter, BufferParam>()
     private val scalars = LinkedHashMap<IrValueParameter, ScalarParam>()
     private val params = mutableListOf<Any>()
-    private val helpers = LinkedHashMap<IrSimpleFunction, Helper>()
+    private val helpers = LinkedHashMap<Any, Helper>()
     private val helperStack = ArrayDeque<IrSimpleFunction>()
+    private var usesFloatToInt = false
+    private var usesFloatChecks = false
 
     private class Helper(val name: String, var code: String = "")
+
+    /** A helper that takes arrays is generated once per distinct set of kernel buffers passed to it. */
+    private data class HelperKey(val function: IrSimpleFunction, val arrays: List<BufferParam>)
 
     private data class Expr(val code: String, val type: WType)
 
@@ -124,7 +133,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             appendLine()
             appendLine("struct KernelinParams {")
             appendLine("  kernelin_size: u32,")
-            for (s in scalars.values) appendLine("  ${s.name}: ${s.type.wgsl},")
+            for (s in scalars.values) appendLine("  ${s.name}: ${s.type.uniformWgsl},")
             appendLine("}")
             appendLine()
             appendLine("@group(0) @binding(0) var<uniform> kernelin_params: KernelinParams;")
@@ -134,6 +143,30 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             }
             appendLine()
             appendLine("var<private> kernelin_id: u32;")
+            if (usesFloatToInt || usesFloatChecks) {
+                // Checked on the bits: GPU compilers may assume no NaNs and drop a plain `x != x`.
+                appendLine()
+                appendLine("fn kernelin_is_nan(x: f32) -> bool {")
+                appendLine("  return (bitcast<u32>(x) & 0x7fffffffu) > 0x7f800000u;")
+                appendLine("}")
+                appendLine()
+                appendLine("fn kernelin_is_inf(x: f32) -> bool {")
+                appendLine("  return (bitcast<u32>(x) & 0x7fffffffu) == 0x7f800000u;")
+                appendLine("}")
+            }
+            if (usesFloatToInt) {
+                // Kotlin's Float.toInt(): NaN -> 0, too large -> Int.MAX_VALUE. Plain i32() clamps to 2^31 - 128.
+                appendLine()
+                appendLine("fn kernelin_f2i(x: f32) -> i32 {")
+                appendLine("  if (kernelin_is_nan(x)) {")
+                appendLine("    return 0i;")
+                appendLine("  }")
+                appendLine("  if (x >= 2147483648.0f) {")
+                appendLine("    return 2147483647i;")
+                appendLine("  }")
+                appendLine("  return i32(x);")
+                appendLine("}")
+            }
             for (h in helpers.values) {
                 appendLine()
                 append(h.code)
@@ -172,9 +205,9 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             val scalar = scalarType(p.type)
             when {
                 element != null -> BufferParam(name, element, binding++).also { buffers[p] = it; params += it }
-                scalar == WType.I32 || scalar == WType.F32 -> ScalarParam(name, scalar).also { scalars[p] = it; params += it }
-                scalar == WType.BOOL -> error(p, "Boolean kernel parameters aren't supported yet; pass an Int (0 or 1)")
-                else -> error(p, "parameter '${p.name}' has type ${p.type.describe()}; kernels accept FloatArray, IntArray, Int and Float${p.type.suggestion()}")
+                scalar == WType.I32 || scalar == WType.F32 || scalar == WType.BOOL ->
+                    ScalarParam(name, scalar).also { scalars[p] = it; params += it }
+                else -> error(p, "parameter '${p.name}' has type ${p.type.describe()}; kernels accept FloatArray, IntArray, Int, Float and Boolean${p.type.suggestion()}")
             }
         }
     }
@@ -185,7 +218,60 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
         private var indent = 1
         private val locals = HashMap<IrValueDeclaration, Expr>()
         private val arrayAliases = HashMap<IrValueDeclaration, BufferParam>()
-        private val loops = ArrayDeque<IrLoop>()
+        private val loops = ArrayDeque<LoopEntry>()
+
+        /**
+         * One loop being emitted. [key] is the IrLoop (or the lambda of a `repeat`). WGSL has no labels, so a
+         * `break@outer` / `continue@outer` from a nested loop sets a flag on the target and breaks out level by level.
+         */
+        private inner class LoopEntry(val key: Any, val declPos: Int, val declIndent: Int) {
+            var breakFlag: String? = null
+            var continueFlag: String? = null
+            /** Jumps that leave this loop for an outer one: (target, isBreak). */
+            val jumpsOut = LinkedHashSet<Pair<LoopEntry, Boolean>>()
+        }
+
+        private inline fun loop(key: Any, emit: () -> Unit) {
+            val entry = LoopEntry(key, out.length, indent)
+            loops.addLast(entry)
+            emit()
+            loops.removeLast()
+            val decls = listOfNotNull(entry.breakFlag, entry.continueFlag)
+                .joinToString("") { "  ".repeat(entry.declIndent) + "var $it: bool = false;\n" }
+            if (decls.isNotEmpty()) out.insert(entry.declPos, decls)
+            val parent = loops.lastOrNull()
+            for ((target, isBreak) in entry.jumpsOut) {
+                val flag = if (isBreak) target.breakFlag!! else target.continueFlag!!
+                when {
+                    target !== parent || isBreak -> line("if ($flag) { break; }")
+                    else -> line("if ($flag) { $flag = false; continue; }")
+                }
+            }
+        }
+
+        private fun jumpTo(target: LoopEntry, isBreak: Boolean) {
+            if (target === loops.last()) {
+                line(if (isBreak) "break;" else "continue;")
+                return
+            }
+            val flag = if (isBreak) {
+                target.breakFlag ?: names.allocate("kernelin_break", internal = true).also { target.breakFlag = it }
+            } else {
+                target.continueFlag ?: names.allocate("kernelin_continue", internal = true).also { target.continueFlag = it }
+            }
+            line("$flag = true;")
+            line("break;")
+            for (e in loops.reversed()) {
+                if (e === target) break
+                e.jumpsOut += target to isBreak
+            }
+        }
+
+        private fun jump(j: IrBreakContinue) {
+            val target = loops.lastOrNull { it.key == j.loop }
+                ?: return run { fail(j, "this break/continue target isn't supported") }
+            jumpTo(target, j is IrBreak)
+        }
 
         fun translate(): String {
             when (val body = function.body) {
@@ -199,6 +285,10 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
 
         fun bindParameter(param: IrValueParameter, name: String, type: WType) {
             locals[param] = Expr(name, type)
+        }
+
+        fun bindArray(param: IrValueParameter, buffer: BufferParam) {
+            arrayAliases[param] = buffer
         }
 
         private fun fail(element: IrElement, message: String): Expr {
@@ -251,8 +341,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 is IrContainerExpression -> s.statements.forEach(::statement)
                 is IrWhileLoop -> whileLoop(s)
                 is IrDoWhileLoop -> doWhileLoop(s)
-                is IrBreak -> { checkLoopTarget(s); line("break;") }
-                is IrContinue -> { checkLoopTarget(s); line("continue;") }
+                is IrBreakContinue -> jump(s)
                 is IrReturn -> returnStatement(s)
                 is IrTypeOperatorCall -> when (s.operator) {
                     IrTypeOperator.IMPLICIT_COERCION_TO_UNIT -> statement(s.argument)
@@ -269,7 +358,12 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             val pre = mutableListOf<String>()
             val value = expr(e, pre)
             pre.forEach(::line)
-            if (value.type != WType.UNIT) line("_ = ${value.code};")
+            when {
+                // A value nobody uses (e.g. sqrt(x) on its own line): WGSL needs a phony assignment.
+                value.type != WType.UNIT -> line("_ = ${value.code};")
+                // A call to a helper that returns nothing (e.g. bump(out, i)) is a statement of its own.
+                value.code.isNotEmpty() -> line("${value.code};")
+            }
         }
 
         private fun variable(v: IrVariable, pre: MutableList<String>?) {
@@ -331,7 +425,33 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 line("$target = ${cast(value, buffer.elementType)};")
                 return
             }
+            val lambda = call.regularArgs().getOrNull(1) as? IrFunctionExpression
+            if (lambda != null && fn.kotlinFqName.asString() == "kotlin.repeat") {
+                repeatLoop(call, lambda)
+                return
+            }
             expressionStatement(call)
+        }
+
+        /** `repeat(n) { body }` becomes `for (var it = 0; it < n; it++) { body }`. */
+        private fun repeatLoop(call: IrCall, lambda: IrFunctionExpression) {
+            val pre = mutableListOf<String>()
+            val times = cast(expr(call.regularArgs()[0], pre), WType.I32)
+            val function = lambda.function
+            val param = function.parameters.firstOrNull { it.kind == IrParameterKind.Regular }
+            val i = names.allocate(param?.name?.asString() ?: "it")
+            param?.let { locals[it] = Expr(i, WType.I32) }
+            val body = function.body as? IrBlockBody ?: return run { fail(lambda, "this repeat body isn't supported") }
+            block("") {
+                pre.forEach(::line)
+                val end = names.allocate("kernelin_end", internal = true)
+                line("let $end: i32 = $times;")
+                loop(function) {
+                    block("for (var $i: i32 = 0i; $i < $end; $i = $i + 1i)") {
+                        body.statements.forEach(::statement)
+                    }
+                }
+            }
         }
 
         private fun whenStatement(w: IrWhen) {
@@ -388,8 +508,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
         private fun org.jetbrains.kotlin.ir.expressions.IrBranch.isElse() =
             this is IrElseBranch || condition.isTrueConst()
 
-        private fun whileLoop(loop: IrWhileLoop) {
-            loops.addLast(loop)
+        private fun whileLoop(loop: IrWhileLoop) = loop(loop) {
             val pre = mutableListOf<String>()
             val cond = expr(loop.condition, pre)
             if (pre.isEmpty()) {
@@ -401,11 +520,9 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                     loop.body?.let(::statement)
                 }
             }
-            loops.removeLast()
         }
 
-        private fun doWhileLoop(loop: IrDoWhileLoop) {
-            loops.addLast(loop)
+        private fun doWhileLoop(loop: IrDoWhileLoop) = loop(loop) {
             block("loop") {
                 loop.body?.let(::statement)
                 val pre = mutableListOf<String>()
@@ -415,7 +532,6 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                     line("break if !(${cast(cond, WType.BOOL)});")
                 }
             }
-            loops.removeLast()
         }
 
         /** `x = x op y` / `a[i] = a[i] op y` -> the operator and `y`, so we can emit `x op= y`. */
@@ -439,13 +555,13 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             return true
         }
 
-        private fun checkLoopTarget(jump: IrBreakContinue) {
-            if (loops.lastOrNull() != jump.loop) {
-                fail(jump, "break/continue to an outer loop label isn't supported yet")
-            }
-        }
-
         private fun returnStatement(r: IrReturn) {
+            loops.lastOrNull { it.key == r.returnTargetSymbol.owner }?.let { target ->
+                // `return@repeat` (or the end of a repeat lambda) moves on to the next iteration.
+                if (!r.value.isUnitValue()) statement(r.value)
+                jumpTo(target, isBreak = false)
+                return
+            }
             if (isKernel || function.returnType.let(::scalarType) == WType.UNIT) {
                 if (!r.value.isUnitValue()) statement(r.value)
                 line("return;")
@@ -492,11 +608,11 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                     else -> if (range.inclusive) "<=" else "<"
                 }
                 val update = if (range.descending) "$i - $step" else "$i + $step"
-                loops.addLast(whileLoop)
-                block("for (var $i: i32 = ${range.start}; $i $cmp $end; $i = $update)") {
-                    whileBody.statements.drop(1).forEach(::statement)
+                loop(whileLoop) {
+                    block("for (var $i: i32 = ${range.start}; $i $cmp $end; $i = $update)") {
+                        whileBody.statements.drop(1).forEach(::statement)
+                    }
                 }
-                loops.removeLast()
             }
         }
 
@@ -552,7 +668,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
         }
 
         private fun constant(c: IrConst): Expr = when (val v = c.value) {
-            is Int -> Expr(if (v == Int.MIN_VALUE) "(-2147483647i - 1i)" else "${v}i", WType.I32)
+            is Int -> Expr(constant(v), WType.I32)
             is Float -> if (v.isFinite()) Expr(floatLiteral(v), WType.F32) else fail(c, "NaN and infinite Float literals aren't supported")
             is Boolean -> Expr(v.toString(), WType.BOOL)
             is Double -> fail(c, "Double isn't supported on most GPUs; use Float (add an f suffix: 1.0f)")
@@ -560,10 +676,16 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             else -> fail(c, "this constant type isn't supported on the GPU")
         }
 
+        private fun constant(v: Int) = if (v == Int.MIN_VALUE) "(-2147483647i - 1i)" else "${v}i"
+
         private fun getValue(e: IrGetValue): Expr {
             val owner = e.symbol.owner
             locals[owner]?.let { return it }
-            scalars[owner]?.let { return Expr("kernelin_params.${it.name}", it.type) }
+            scalars[owner]?.let {
+                // Booleans travel as u32 (bool isn't allowed in uniform buffers).
+                return if (it.type == WType.BOOL) Expr("(kernelin_params.${it.name} != 0u)", WType.BOOL)
+                else Expr("kernelin_params.${it.name}", it.type)
+            }
             if (owner in buffers || owner in arrayAliases) {
                 return fail(e, "an array can only be used for indexing (a[i]), a.size or a.indices")
             }
@@ -630,8 +752,22 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 }
             }
 
+            if (owner == "kotlin.Double" && (name == "toFloat" || name == "toInt")) return doubleConstant(call, name)
+            if (owner == "kotlin" && name in setOf("isNaN", "isInfinite", "isFinite")) {
+                val x = expr(call.receiver()!!, pre)
+                if (x.type != WType.F32) return fail(call, "$name() is supported for Float only")
+                usesFloatChecks = true
+                return when (name) {
+                    "isNaN" -> Expr("kernelin_is_nan(${x.code})", WType.BOOL)
+                    "isInfinite" -> Expr("kernelin_is_inf(${x.code})", WType.BOOL)
+                    else -> Expr("(!kernelin_is_nan(${x.code}) && !kernelin_is_inf(${x.code}))", WType.BOOL)
+                }
+            }
             if (owner == "kotlin.Int" || owner == "kotlin.Float" || owner == "kotlin.Boolean") {
                 return primitiveMember(call, name, pre)
+            }
+            if (name == "contains" && (owner?.startsWith("kotlin.ranges") == true || owner == "kotlin.collections")) {
+                return rangeContains(call, pre)
             }
             if (owner == "kotlin.math") return mathFunction(call, name, pre)
             if (owner == "kotlin.ranges" && name in setOf("coerceIn", "coerceAtLeast", "coerceAtMost")) {
@@ -645,6 +781,47 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 }
             }
             return helperCall(call, fn, pre)
+        }
+
+        /** `x in a..b`, `x in a until b`, `x in a downTo b` (also `!in` and `when (x) { in a..b -> }`). */
+        private fun rangeContains(call: IrCall, pre: MutableList<String>): Expr {
+            val range = call.receiver() as? IrCall
+            val kind = range?.symbol?.owner?.name?.asString()
+            if (range == null || kind !in setOf("rangeTo", "until", "rangeUntil", "downTo")) {
+                return fail(call, "'in' supports ranges written in place with .., ..<, until or downTo (like x in 0 until n)")
+            }
+            val value = expr(call.regularArgs()[0], pre)
+            val low = expr(range.receiver()!!, pre)
+            val high = expr(range.regularArgs()[0], pre)
+            val t = if (WType.F32 in setOf(value.type, low.type, high.type)) WType.F32 else WType.I32
+            var x = cast(value, t)
+            if (!x.matches(Regex("[A-Za-z_][A-Za-z0-9_.]*|-?[0-9.]+[if]?"))) {
+                val tmp = names.allocate("kernelin_in", internal = true)
+                pre += "let $tmp: ${t.wgsl} = $x;"
+                x = tmp
+            }
+            val a = cast(low, t)
+            val b = cast(high, t)
+            return when (kind) {
+                "rangeTo" -> Expr("(($x >= $a) && ($x <= $b))", WType.BOOL)
+                "downTo" -> Expr("(($x <= $a) && ($x >= $b))", WType.BOOL)
+                else -> Expr("(($x >= $a) && ($x < $b))", WType.BOOL)
+            }
+        }
+
+        /** Doubles can't run on most GPUs, but a Double constant converted right away (PI.toFloat()) is fine. */
+        private fun doubleConstant(call: IrCall, name: String): Expr {
+            val receiver = call.receiver()
+            val value: Double? = when {
+                receiver is IrConst -> receiver.value as? Double
+                receiver is IrCall && receiver.symbol.owner.packageFq() == "kotlin.math" ->
+                    when (receiver.symbol.owner.name.asString()) { "<get-PI>" -> kotlin.math.PI; "<get-E>" -> kotlin.math.E; else -> null }
+                else -> null
+            }
+            if (value == null || !value.isFinite()) {
+                return fail(call, "Double isn't supported on most GPUs; use Float (only Double constants converted right away, like PI.toFloat(), are allowed)")
+            }
+            return if (name == "toFloat") Expr(floatLiteral(value.toFloat()), WType.F32) else Expr(constant(value.toInt()), WType.I32)
         }
 
         private fun builtinOperator(call: IrCall, name: String, pre: MutableList<String>): Expr {
@@ -695,7 +872,13 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 "shl" -> Expr("(${receiver.code} << u32(${args[0].code}))", WType.I32)
                 "shr" -> Expr("(${receiver.code} >> u32(${args[0].code}))", WType.I32)
                 "ushr" -> Expr("i32(u32(${receiver.code}) >> u32(${args[0].code}))", WType.I32)
-                "toFloat", "toInt" -> Expr(cast(receiver, resultType), resultType)
+                "toInt" -> if (receiver.type == WType.F32) {
+                    usesFloatToInt = true
+                    Expr("kernelin_f2i(${receiver.code})", WType.I32)
+                } else {
+                    Expr(cast(receiver, resultType), resultType)
+                }
+                "toFloat" -> Expr(cast(receiver, resultType), resultType)
                 "compareTo" -> {
                     val (l, r) = promote(receiver, args[0])
                     Expr("select(select(0i, 1i, ${l.code} > ${r.code}), -1i, ${l.code} < ${r.code})", WType.I32)
@@ -746,8 +929,17 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             }
             if (fn.hasAnnotation(KERNEL_ANNOTATION)) return fail(call, "a kernel can't call another @Kernel function")
             if (fn in helperStack) return fail(call, "recursion isn't allowed on the GPU ('${fn.name}' calls itself)")
-            val helper = helpers[fn] ?: translateHelper(call, fn) ?: return Expr("0", scalarType(call.type) ?: WType.I32)
-            val args = fn.parameters.mapIndexed { i, p ->
+            val arrays = LinkedHashMap<Int, BufferParam>()
+            fn.parameters.forEachIndexed { i, p ->
+                if (arrayElementType(p.type) != null) {
+                    arrays[i] = call.arguments[i]?.let(::arrayBuffer)
+                        ?: return fail(call, "arrays passed to '${fn.name}' must be the kernel's own array parameters")
+                }
+            }
+            val key: Any = if (arrays.isEmpty()) fn else HelperKey(fn, arrays.values.toList())
+            val helper = helpers[key] ?: translateHelper(call, fn, key, arrays) ?: return Expr("0", scalarType(call.type) ?: WType.I32)
+            val args = fn.parameters.mapIndexedNotNull { i, p ->
+                if (i in arrays) return@mapIndexedNotNull null
                 val arg = call.arguments[i] ?: return fail(call, "default arguments aren't supported in kernel helpers yet")
                 cast(expr(arg, pre), scalarType(p.type) ?: WType.I32)
             }
@@ -755,17 +947,19 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             return Expr("${helper.name}(${args.joinToString(", ")})", type)
         }
 
-        private fun translateHelper(call: IrCall, fn: IrSimpleFunction): Helper? {
+        private fun translateHelper(call: IrCall, fn: IrSimpleFunction, key: Any, arrays: Map<Int, BufferParam>): Helper? {
             val returnType = scalarType(fn.returnType)
             var ok = returnType != null
             if (returnType == null) fail(call, "helper '${fn.name}' returns ${fn.returnType.describe()}; helpers must return Int, Float, Boolean or Unit")
             if (fn.typeParameters.isNotEmpty()) { ok = false; fail(call, "helper '${fn.name}' can't have type parameters") }
-            val paramTypes = fn.parameters.map { p ->
+            val paramTypes = fn.parameters.mapIndexed { i, p ->
                 val t = scalarType(p.type)
-                if (p.kind == IrParameterKind.DispatchReceiver || p.kind == IrParameterKind.Context) {
+                if (i in arrays) {
+                    null
+                } else if (p.kind == IrParameterKind.DispatchReceiver || p.kind == IrParameterKind.Context) {
                     ok = false; fail(call, "helper '${fn.name}' must be a top-level function"); null
                 } else if (t == null || t == WType.UNIT) {
-                    ok = false; fail(call, "helper '${fn.name}' parameter '${p.name}' must be Int, Float or Boolean (arrays can't be passed yet)"); null
+                    ok = false; fail(call, "helper '${fn.name}' parameter '${p.name}' must be Int, Float, Boolean, FloatArray or IntArray"); null
                 } else t
             }
             if (!ok) return null
@@ -773,7 +967,9 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             val helper = Helper(names.allocate(fn.name.asString()))
             helperStack.addLast(fn)
             val translator = BodyTranslator(fn, isKernel = false)
-            val paramDecls = fn.parameters.mapIndexed { i, p ->
+            arrays.forEach { (i, buffer) -> translator.bindArray(fn.parameters[i], buffer) }
+            val paramDecls = fn.parameters.mapIndexedNotNull { i, p ->
+                if (i in arrays) return@mapIndexedNotNull null
                 val pname = names.allocate(if (p.kind == IrParameterKind.ExtensionReceiver) "receiver" else p.name.asString())
                 translator.bindParameter(p, pname, paramTypes[i]!!)
                 "$pname: ${paramTypes[i]!!.wgsl}"
@@ -782,7 +978,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             helperStack.removeLast()
             val ret = if (returnType == WType.UNIT) "" else " -> ${returnType!!.wgsl}"
             helper.code = "fn ${helper.name}(${paramDecls.joinToString(", ")})$ret {\n$body}\n"
-            helpers[fn] = helper
+            helpers[key] = helper
             return helper
         }
 
