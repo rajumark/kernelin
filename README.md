@@ -29,8 +29,10 @@ becomes
 
 ## Status
 
-**0.1.0 is released on Maven Central.** On an Apple M5, the generated shaders match the Kotlin CPU results and run
-up to 118× faster than all 10 CPU cores (see the [website](https://rajumark.github.io/kernelin/#benchmarks) and `benchmarks/`).
+**0.2.0 is released on Maven Central.** On an Apple M5, the generated shaders match the Kotlin CPU results and run
+up to 118× faster than all 10 CPU cores; on a mid-range Android phone (Adreno GPU, Chrome) up to 33× faster than all
+8 CPU cores (see the [website](https://rajumark.github.io/kernelin/#benchmarks) and `benchmarks/`). Since 0.2.0,
+IntelliJ IDEA and Android Studio underline code the GPU can't run while you type.
 
 **[Live demo →](https://rajumark.github.io/kernelin/demo/)** a fractal computed on your GPU by Kernelin-generated code.
 
@@ -64,20 +66,20 @@ pluginManagement {
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.21"          // or kotlin("multiplatform")
-    id("io.github.rajumark.kernelin") version "0.1.0"
+    id("io.github.rajumark.kernelin") version "0.2.0"
 }
 ```
 
 The plugin runs the Kernelin compiler plugin on every compilation and adds
 `io.github.rajumark:kernelin-runtime` (plus `kernelin-webgpu` to `wasmJsMain` in Multiplatform projects).
-Kernelin 0.1.0 is built for **Kotlin 2.4.21**; the compiler plugin API changes between Kotlin versions.
+Kernelin 0.2.0 is built for **Kotlin 2.4.21**; the compiler plugin API changes between Kotlin versions.
 
 | Artifact | What it is |
 |---|---|
-| `io.github.rajumark:kernelin-runtime:0.1.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu` (JVM + Wasm) |
-| `io.github.rajumark:kernelin-webgpu:0.1.0` | Kotlin/Wasm WebGPU host |
-| `io.github.rajumark:kernelin-compiler-plugin:0.1.0` | the K2 compiler plugin (added by the Gradle plugin) |
-| `io.github.rajumark:kernelin-gradle-plugin:0.1.0` | Gradle plugin `io.github.rajumark.kernelin` |
+| `io.github.rajumark:kernelin-runtime:0.2.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu` (JVM + Wasm) |
+| `io.github.rajumark:kernelin-webgpu:0.2.0` | Kotlin/Wasm WebGPU host |
+| `io.github.rajumark:kernelin-compiler-plugin:0.2.0` | the K2 compiler plugin (added by the Gradle plugin) |
+| `io.github.rajumark:kernelin-gradle-plugin:0.2.0` | Gradle plugin `io.github.rajumark.kernelin` |
 
 See [`examples/`](examples) for complete projects (`hello-jvm`, `hello-multiplatform`).
 

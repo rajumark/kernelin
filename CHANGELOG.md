@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.2.0 (2026-10-16)
+
+IDE support:
+- Errors while you type: K2 frontend (FIR) checks report unsupported code in `@Kernel` functions, so IntelliJ IDEA
+  and Android Studio underline it with the same messages as the build. Third-party compiler plugins need the IDE
+  registry key `kotlin.k2.only.bundled.compiler.plugins.enabled` set to `false`. They only report what the
+  translator rejects anyway (checked with 2,000 fuzzed kernels). Frontend errors stop the build before the
+  translator, so other errors in the same kernel appear after you fix them.
+- New, clearer messages for nullable values (`?.`, `?:`, `!!`) and for creating objects or arrays in a kernel.
+
 New in kernels:
 - `x in a..b`, `until`, `..<`, `downTo`, `!in`, and `when (x) { in a..b -> }`, for Int and Float.
 - `repeat(n) { }`, including `return@repeat` and `break` / `continue` to an outer loop from inside it.

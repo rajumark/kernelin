@@ -2,7 +2,7 @@
 
 Kernelin lets you write GPU compute kernels in plain Kotlin. A K2 compiler plugin translates every function marked `@Kernel` into a WGSL compute shader. The shader runs on any GPU through WebGPU, and the original function stays normal Kotlin, so it also runs on the CPU for unit tests.
 
-> This page describes **Kernelin 0.1.0**, built for **Kotlin 2.4.21**. Features marked **(main)** are already on the `main` branch and ship in the next release. The same text is available as plain Markdown at [`docs.md`](docs.md) for tools and AI agents.
+> This page describes **Kernelin 0.2.0**, built for **Kotlin 2.4.21**. Features marked **(0.2.0)** are new in this release. The same text is available as plain Markdown at [`docs.md`](docs.md) for tools and AI agents.
 
 ```kotlin
 @Kernel
@@ -42,7 +42,7 @@ Then apply the Gradle plugin next to the Kotlin plugin:
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.21"          // or kotlin("multiplatform")
-    id("io.github.rajumark.kernelin") version "0.1.0"
+    id("io.github.rajumark.kernelin") version "0.2.0"
 }
 ```
 
@@ -92,10 +92,10 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 
 | Artifact | What it is |
 |---|---|
-| `io.github.rajumark:kernelin-runtime:0.1.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` (JVM + Wasm) |
-| `io.github.rajumark:kernelin-webgpu:0.1.0` | Kotlin/Wasm WebGPU host: `WebGpu`, `GpuKernel`, `GpuData`, `GpuResult` |
-| `io.github.rajumark:kernelin-compiler-plugin:0.1.0` | The K2 compiler plugin (added by the Gradle plugin) |
-| `io.github.rajumark:kernelin-gradle-plugin:0.1.0` | Gradle plugin with id `io.github.rajumark.kernelin` |
+| `io.github.rajumark:kernelin-runtime:0.2.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` (JVM + Wasm) |
+| `io.github.rajumark:kernelin-webgpu:0.2.0` | Kotlin/Wasm WebGPU host: `WebGpu`, `GpuKernel`, `GpuData`, `GpuResult` |
+| `io.github.rajumark:kernelin-compiler-plugin:0.2.0` | The K2 compiler plugin (added by the Gradle plugin) |
+| `io.github.rajumark:kernelin-gradle-plugin:0.2.0` | Gradle plugin with id `io.github.rajumark.kernelin` |
 
 ### What the Gradle plugin does
 
@@ -111,7 +111,7 @@ Put kernels in `commonMain` so every target shares them: the JVM runs them on th
 // build.gradle.kts
 plugins {
     kotlin("multiplatform") version "2.4.21"
-    id("io.github.rajumark.kernelin") version "0.1.0"
+    id("io.github.rajumark.kernelin") version "0.2.0"
 }
 
 kotlin {
@@ -155,7 +155,7 @@ fun squares(out: IntArray) {
 | `IntArray` | `array<i32>` storage buffer |
 | `Int` | `i32` field in a uniform struct |
 | `Float` | `f32` field in a uniform struct |
-| `Boolean` **(main)** | `u32` field (0 or 1) in the uniform struct, read as `bool` |
+| `Boolean` **(0.2.0)** | `u32` field (0 or 1) in the uniform struct, read as `bool` |
 
 Kernelin looks at how each array is used. Arrays you only read become `read` buffers; arrays you write become `read_write` buffers. Only `read_write` buffers are copied back from the GPU.
 
@@ -175,21 +175,21 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 
 | Area | Supported |
 |---|---|
-| Types | `Int`, `Float`, `Boolean` for locals; `FloatArray`, `IntArray`, `Int`, `Float` for kernel parameters; `Boolean` parameters **(main)** |
+| Types | `Int`, `Float`, `Boolean` for locals; `FloatArray`, `IntArray`, `Int`, `Float` for kernel parameters; `Boolean` **(0.2.0)** |
 | Variables | `val`, `var`, with or without a type |
-| Operators | `+ - * / %`, unary `-`, `++ --`, `+= -= *= /= %=`, comparisons, `&& \|\| !`, `and or xor inv shl shr ushr` (on main, shift counts use their low 5 bits, exactly like Kotlin, on every GPU) |
+| Operators | `+ - * / %`, unary `-`, `++ --`, `+= -= *= /= %=`, comparisons, `&& \|\| !`, `and or xor inv shl shr ushr` (since 0.2.0, shift counts use their low 5 bits, exactly like Kotlin, on every GPU) |
 | Conversions | `toFloat()`, `toInt()`; mixed `Int`/`Float` math is promoted like Kotlin |
 | Conditions | `if`/`else`, `when` (with or without a subject), both as statements and as values |
 | Loops | `for` over Int ranges: `a until b`, `a..b`, `a..<b`, `a downTo b`, `step n`, `array.indices`; `while`, `do-while`, `break`, `continue` |
-| More loops **(main)** | `repeat(n) { }` (with `return@repeat`), labeled `break@outer` / `continue@outer` at any depth |
-| Ranges **(main)** | `x in a..b`, `until`, `..<`, `downTo`, `x !in ...`, `when (x) { in a..b -> }` for Int and Float (`step` inside `in` is an error) |
+| More loops **(0.2.0)** | `repeat(n) { }` (with `return@repeat`), labeled `break@outer` / `continue@outer` at any depth |
+| Ranges **(0.2.0)** | `x in a..b`, `until`, `..<`, `downTo`, `x !in ...`, `when (x) { in a..b -> }` for Int and Float (`step` inside `in` is an error) |
 | Arrays | `a[i]`, `a[i] = v`, `a[i] += v`, `a.size`, `a.indices` |
 | Math | `kotlin.math` Float versions: `sqrt sin cos tan asin acos atan atan2 sinh cosh tanh exp ln log2 log10 pow hypot floor ceil round truncate abs sign min max` |
 | Clamping | `coerceIn`, `coerceAtLeast`, `coerceAtMost` |
 | Constants | `PI.toFloat()`, `E.toFloat()`, `1.5.toFloat()`, `1.5.toInt()` (a Double constant converted right away) |
-| Constant math **(main)** | All-constant expressions are computed at build time with Kotlin's rules (wrapping, Infinity/NaN), e.g. `-75 shl 28`; `Float.POSITIVE_INFINITY`, `NEGATIVE_INFINITY` and `NaN` constants are allowed |
-| Float checks **(main)** | `isNaN()`, `isInfinite()`, `isFinite()`; `Float.toInt()` matches Kotlin exactly (NaN → 0, too large → `Int.MAX_VALUE`, too small → `Int.MIN_VALUE`) |
-| Helpers | Your own top-level functions and extension functions with `Int`/`Float`/`Boolean` parameters, returning `Int`, `Float`, `Boolean` or `Unit`. They become WGSL `fn`s. **(main)**: helpers can also take the kernel's `FloatArray`/`IntArray` parameters. |
+| Constant math **(0.2.0)** | All-constant expressions are computed at build time with Kotlin's rules (wrapping, Infinity/NaN), e.g. `-75 shl 28`; `Float.POSITIVE_INFINITY`, `NEGATIVE_INFINITY` and `NaN` constants are allowed |
+| Float checks **(0.2.0)** | `isNaN()`, `isInfinite()`, `isFinite()`; `Float.toInt()` matches Kotlin exactly (NaN → 0, too large → `Int.MAX_VALUE`, too small → `Int.MIN_VALUE`) |
+| Helpers | Your own top-level functions and extension functions with `Int`/`Float`/`Boolean` parameters, returning `Int`, `Float`, `Boolean` or `Unit`. They become WGSL `fn`s. **(0.2.0)**: helpers can also take the kernel's `FloatArray`/`IntArray` parameters. |
 
 ### Not supported (compile error)
 
@@ -197,14 +197,12 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 |---|---|---|
 | `Double`, `Long`, `UInt` | Most GPUs have no 64-bit math; unsigned types not yet mapped | `Float` (`1.0f`), `Int` |
 | `String`, `println` | GPUs have no text | Write numbers into an output array |
-| Lambdas, `forEach {}`, `map {}` (`repeat {}` works on main) | No closures on the GPU | A `for` loop |
+| Lambdas, `forEach {}`, `map {}` (`repeat {}` works) | No closures on the GPU | A `for` loop |
 | Recursion | No call stack on the GPU | A loop |
 | `throw`, `try/catch` | No exceptions | Return early or write an error code |
 | Nullable types, `is`, `as` | No objects on the GPU | Plain values |
 | Classes, objects, collections | Only scalars and arrays exist | Several arrays (one per field) |
 | Library calls (except `kotlin.math`) | Their code isn't available to translate | Your own helper function |
-| `Boolean` kernel parameters | Not in 0.1.0 (supported on main) | Pass an `Int` (0 or 1) |
-| Arrays passed to helpers | Not in 0.1.0 (supported on main) | Index the array in the kernel, pass the value |
 | Default args, generics in helpers | Not supported yet | Pass every argument |
 | Structs / data classes, 2D/3D ids, shared memory, atomics | Not supported yet | Flat arrays, `id % width`, one writer per element |
 | A non-`Unit` return from a kernel | Results go into arrays | Write into an array parameter |
@@ -338,7 +336,7 @@ suspend fun runSaxpy(x: FloatArray, y: FloatArray): FloatArray {
 ### Rules for `run`
 
 - `size` is the number of threads (usually the length of the output array).
-- `scalars` must contain **every** `Int` and `Float` parameter by its Kotlin name (on main also `Boolean`; the type becomes `Map<String, Any>`, source compatible, but Wasm libraries built against 0.1.0 that call `run()` need a recompile).
+- `scalars` must contain **every** `Int` and `Float` parameter by its Kotlin name (and `Boolean`, since 0.2.0; the type is `Map<String, Any>`, source compatible with 0.1.0, but Wasm libraries built against 0.1.0 that call `run()` need a recompile).
 - `buffers` must contain **every** array parameter by its Kotlin name.
 - Use `GpuData.empty(n)` for pure outputs, so nothing is uploaded.
 - Only arrays the kernel writes (`read_write`) are copied back. Read them with `result.floats(name)` or `result.ints(name)`.
@@ -358,10 +356,10 @@ The same kernel gives the same results on the CPU and the GPU, with these known 
 |---|---|---|
 | Float rounding in `sin`, `exp`, `pow`, … | IEEE 754 double-backed results | 32-bit, may differ in the last bits. Compare with a tolerance |
 | Float division by zero (`x / 0f`) | `Infinity` or `NaN` | **Not guaranteed.** WGSL leaves it undefined; some GPUs (for example llvmpipe, used in CI) return an ordinary number. Check the divisor yourself |
-| `Infinity` / `NaN` that arrive in a buffer | Normal Kotlin behaviour | **Same as Kotlin** (on main): `isNaN()`, `isInfinite()`, `isFinite()` and `toInt()` check the raw bits |
-| `Float.toInt()` on NaN or out-of-range values | NaN → 0, saturates at `Int.MIN_VALUE` / `Int.MAX_VALUE` | **Same as Kotlin** (on main). On 0.1.0 the result is GPU-specific |
+| `Infinity` / `NaN` that arrive in a buffer | Normal Kotlin behaviour | **Same as Kotlin** (since 0.2.0): `isNaN()`, `isInfinite()`, `isFinite()` and `toInt()` check the raw bits |
+| `Float.toInt()` on NaN or out-of-range values | NaN → 0, saturates at `Int.MIN_VALUE` / `Int.MAX_VALUE` | **Same as Kotlin** (since 0.2.0). On 0.1.0 the result is GPU-specific |
 | Array index out of bounds | Throws `ArrayIndexOutOfBoundsException` | No error: the access is clamped silently. Test on the CPU to catch it |
-| Integer division by zero | Throws `ArithmeticException` | No error: returns a defined value. On main, a **constant** division like `5 / 0` is a compile error |
+| Integer division by zero | Throws `ArithmeticException` | No error: returns a defined value. Since 0.2.0, a **constant** division like `5 / 0` is a compile error |
 | Two threads writing the same element | `dispatch`: the highest id wins; `dispatchParallel`: a race | Undefined order. Give each thread its own element |
 
 Rule of thumb: don't rely on producing `Infinity` or `NaN` inside a kernel. Guard divisions (`if (d != 0f) x / d else 0f`).
@@ -388,13 +386,27 @@ Common messages and fixes:
 | `lambdas aren't supported in kernels yet ... use a for loop` | Replace `repeat {}` / `forEach {}` with `for` |
 | `recursion isn't allowed on the GPU` | Rewrite as a loop |
 | `a @Kernel function must return Unit` | Write the result into an array |
-| `parameter 'p' has type X; kernels accept FloatArray, IntArray, Int and Float` | Change the parameter type |
-| `Boolean kernel parameters aren't supported yet; pass an Int (0 or 1)` | Use `Int` (fixed on main) |
+| `parameter 'p' has type X; kernels accept FloatArray, IntArray, Int, Float and Boolean` | Change the parameter type |
+| `variable 'x' has type X; only Int, Float and Boolean are supported` | Use `Int`, `Float` or `Boolean` |
+| `nullable values aren't supported on the GPU` | Remove `?.`, `?:` and `!!` |
+| `creating objects or arrays isn't supported in kernels` | Pass arrays in as kernel parameters |
 | `'kotlin.collections.sum' can't run on the GPU` | Write the loop yourself |
 | `for loops must iterate over an Int range (until, .., ..<, downTo, step, indices)` | Use an Int range |
 | `an if/when used as a value needs an else branch` | Add `else` |
-| `integer division by zero (Kotlin would throw ArithmeticException here)` **(main)** | Fix the constant divisor |
+| `integer division by zero (Kotlin would throw ArithmeticException here)` **(0.2.0)** | Fix the constant divisor |
 | `kernelSource() was not replaced: apply the Kernelin compiler plugin` (at runtime) | Apply the Gradle plugin to that module |
+
+### Errors in your IDE **(0.2.0)**
+
+Kernelin checks kernels in the K2 frontend too (FIR checkers), so IntelliJ IDEA and Android Studio underline unsupported code **while you type**, with the same messages as the build. The frontend checks cover the common mistakes: kernel signature, parameter and variable types, `Double`/`Long`/`String` values, lambdas, library calls, object creation, exceptions, casts and nullable values. Everything else (for example recursion or unsupported loop shapes) is still checked when you build.
+
+To see them in the IDE:
+
+1. Use the IDE's K2 mode (the default in IntelliJ IDEA 2025.1+ and recent Android Studio).
+2. The IDE runs only its bundled compiler plugins by default. Open **Help → Find Action → Registry…** and set `kotlin.k2.only.bundled.compiler.plugins.enabled` to `false`, then reload the Gradle project.
+3. Use a Kotlin plugin in the IDE that matches Kotlin 2.4.21, because the compiler plugin API changes between versions.
+
+Frontend errors stop the build before the translator runs. If a kernel has both kinds of mistakes, the remaining errors show up after you fix the first ones.
 
 When a kernel translates, the build log shows `Kernelin: translated @Kernel com.example.saxpy to WGSL (N lines)`.
 
@@ -447,7 +459,7 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `params` | All parameters in Kotlin order |
 | `buffers` / `scalars` | Parameters filtered by kind |
 | `uniformBytes` | Size of the uniform buffer in bytes |
-| `Param.name`, `kind`, `type`, `binding`, `access` | `kind` is `buffer` or `scalar`; `type` is `f32`, `i32` or `u32` (plus `bool` on main); `access` is `read` or `read_write` |
+| `Param.name`, `kind`, `type`, `binding`, `access` | `kind` is `buffer` or `scalar`; `type` is `f32`, `i32` or `u32` (plus `bool` since 0.2.0); `access` is `read` or `read_write` |
 
 ### `KernelinCpu`
 
@@ -600,7 +612,7 @@ brew install deno
 scripts/check-incremental.sh                   # checks incremental builds never keep a stale shader
 ```
 
-Quality checks on main, all part of `gradle build`:
+Quality checks, all part of `gradle build`:
 
 | Check | What it does |
 |---|---|
@@ -608,7 +620,7 @@ Quality checks on main, all part of `gradle build`:
 | ABI validation | The public API of every module is recorded in `api/` and checked by `checkKotlinAbi`; explicit API mode and KDoc on all public API |
 | Coverage | Kover, currently 86%; the build fails below 80%. Report: `gradle koverHtmlReport` |
 
-39 tests in total: 28 compiler tests (including 13 GPU tests and the fuzzer), 6 runtime, 5 samples.
+47 tests in total: 36 compiler tests (including 13 GPU tests, 7 IDE-check tests and the fuzzer), 6 runtime, 5 samples.
 
 Other tasks:
 
@@ -630,7 +642,7 @@ gradle :samples:exportDemo                     # rebuild the live demo into docs
 
 **`kernelSource() was not replaced`** — The module calling `kernelSource` doesn't have the compiler plugin. Apply `id("io.github.rajumark.kernelin")` to that module.
 
-**The plugin fails with an API error** — Your Kotlin version is not 2.4.21. Kernelin 0.1.0 only supports Kotlin 2.4.21.
+**The plugin fails with an API error** — Your Kotlin version is not 2.4.21. Kernelin 0.2.0 only supports Kotlin 2.4.21.
 
 **`WebGPU is not available in this browser`** — Use a recent Chrome, Edge or Safari, or enable WebGPU in Firefox. Check `WebGpu.isSupported` before calling `create()`.
 
@@ -646,9 +658,9 @@ gradle :samples:exportDemo                     # rebuild the live demo into docs
 
 **Why WGSL and WebGPU?** WebGPU is the one modern GPU API that runs on Metal, Vulkan and Direct3D 12, in browsers and natively. WGSL is its shading language.
 
-**Can I run kernels on Android or desktop JVM GPUs?** In 0.1.0 the bundled GPU host is Kotlin/Wasm in the browser. The shader and manifest are available on every platform through `kernelSource`, so any native WebGPU host (wgpu, Dawn) can run them.
+**Can I run kernels on Android or desktop JVM GPUs?** The bundled GPU host is Kotlin/Wasm in the browser, which also works in Chrome on Android (tested on a Snapdragon phone with an Adreno GPU: all sample kernels match the CPU). The shader and manifest are available on every platform through `kernelSource`, so any native WebGPU host (wgpu, Dawn) can run them.
 
-**Does it support Kotlin/Native or JS?** The runtime targets JVM and Wasm in 0.1.0.
+**Does it support Kotlin/Native or JS?** The runtime targets JVM and Wasm.
 
 **Is it fast?** On an Apple M5, heavy kernels run up to 118× faster than the same Kotlin on all 10 CPU cores. Light kernels are limited by copying data.
 
@@ -664,13 +676,13 @@ This section is written for AI coding agents (and the humans who instruct them).
 Follow every rule. If a rule can't be met, don't write a kernel; write normal Kotlin instead.
 
 1. Annotate with `@Kernel` (`import io.github.rajumark.kernelin.Kernel`). The function is **top-level**, returns **`Unit`**, has no receiver, no type parameters, and is not `suspend`.
-2. Parameters are only `FloatArray`, `IntArray`, `Int`, `Float`. No `Boolean` parameters: use an `Int` flag.
+2. Parameters are only `FloatArray`, `IntArray`, `Int`, `Float`, `Boolean`.
 3. Start with `val i = globalId()` (`import io.github.rajumark.kernelin.globalId`). Each thread handles element `i`. Never write a loop over all elements.
 4. Write results into an array parameter at index `i`. Never return a value from the kernel.
 5. Use only `Int`, `Float`, `Boolean` locals. Always write Float literals with `f`: `0.5f`, `1f`. Never use `Double`, `Long`, `String`, nullable types, classes or collections.
-6. No lambdas: no `forEach {}`, `map {}` (and no `repeat {}` on 0.1.0). Use `for (k in 0 until n)`, `while`, or `do-while`.
+6. No lambdas except `repeat(n) { }`: no `forEach {}`, `map {}`. Use `for (k in 0 until n)`, `while`, or `do-while`.
 7. Math only from `kotlin.math` with Float arguments (`sqrt`, `sin`, `cos`, `exp`, `pow`, `abs`, `min`, `max`, …). For π use `PI.toFloat()`.
-8. Helper functions must be top-level, take only `Int`/`Float`/`Boolean`, return `Int`/`Float`/`Boolean`/`Unit`, not recurse, have no default arguments, and must not take arrays.
+8. Helper functions must be top-level, take only `Int`/`Float`/`Boolean`, return `Int`/`Float`/`Boolean`/`Unit`, not recurse, have no default arguments. They may take the kernel's own array parameters.
 9. 2D data is a flat array: `x = i % width`, `y = i / width`.
 10. Guard neighbour reads: `if (j >= 0 && j < a.size)`. The bounds check against `size` is automatic only for `globalId()` itself.
 11. Never divide by a value that can be zero without a check: `x / 0f` is undefined on the GPU (it is not guaranteed to be `Infinity` or `NaN`).
@@ -726,11 +738,11 @@ val out = result.floats("out")
 ### Snippet for your project's `AGENTS.md` or `CLAUDE.md`
 
 ```text
-This project uses Kernelin 0.1.0 (Kotlin 2.4.21) to run @Kernel functions on the GPU.
+This project uses Kernelin 0.2.0 (Kotlin 2.4.21) to run @Kernel functions on the GPU.
 Docs for agents: https://rajumark.github.io/kernelin/docs.md
-When writing a @Kernel: top-level, returns Unit, params only FloatArray/IntArray/Int/Float,
+When writing a @Kernel: top-level, returns Unit, params only FloatArray/IntArray/Int/Float/Boolean,
 start with val i = globalId(), write results to out[i], Float literals with f,
-no Double/Long/String/lambdas/recursion/classes; math only from kotlin.math.
+no Double/Long/String/lambdas (except repeat)/recursion/classes; math only from kotlin.math.
 Test every kernel on the CPU with KernelinCpu.dispatch(size) { kernel(...) }.
 ```
 
@@ -744,10 +756,10 @@ Test every kernel on the CPU with KernelinCpu.dispatch(size) { kernel(...) }.
 
 **Next (towards 1.0)**
 
-- IDE errors while you type: FIR checkers, so unsupported code is underlined in IntelliJ IDEA and Android Studio, not only on build
-- Vector types and 2D ids
-- Android: kernels already run and match on a phone GPU in Chrome (see the logs page benchmarks); next, the live demo on phones and AndroidX WebGPU natively
-- Done on main: `Boolean` parameters, arrays in helpers, `repeat`, labeled `break`/`continue`, `in` ranges, `isNaN`, Kotlin-exact constant math and shifts; GPU-vs-CPU differential tests, a fuzzer, ABI checks and coverage gates
+- 2D/3D ids, workgroup shared memory and atomics (for matrix multiply, reductions and histograms)
+- Vector types
+- Android: kernels already run and match on a phone GPU in Chrome; next, AndroidX WebGPU natively
+- Done in 0.2.0: IDE errors while you type (FIR checkers), `Boolean` parameters, arrays in helpers, `repeat`, labeled `break`/`continue`, `in` ranges, `isNaN`, Kotlin-exact constant math and shifts; GPU-vs-CPU differential tests, a fuzzer, ABI checks and coverage gates
 
 **Later (2.0 and beyond)**
 
@@ -755,4 +767,4 @@ Test every kernel on the CPU with KernelinCpu.dispatch(size) { kernel(...) }.
 - Built-in `Vec2/3/4` and `Mat2/3/4` types with operators; `UInt`, `Short`, `Byte`
 - More backends next to WGSL: SPIR-V (Vulkan), MSL (Metal) and CUDA
 
-See the [changelog](https://github.com/rajumark/kernelin/blob/main/CHANGELOG.md) for released changes and the "Unreleased" list of everything on main.
+See the [changelog](https://github.com/rajumark/kernelin/blob/main/CHANGELOG.md) for released changes and the "Unreleased" list of everything on main since the last release.
