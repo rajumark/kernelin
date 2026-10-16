@@ -3,803 +3,769 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kernelin Project Report</title>
+<title>Kernelin · GPU kernels in plain Kotlin</title>
+<meta name="description" content="Kernelin is a K2 compiler plugin that turns plain Kotlin @Kernel functions into WGSL compute shaders that run on any GPU through WebGPU, and still run on the CPU for unit tests.">
+<meta name="theme-color" content="#f7f5f0">
+<meta property="og:title" content="Kernelin · GPU kernels in plain Kotlin">
+<meta property="og:description" content="Add @Kernel to a Kotlin function. The compiler writes the GPU code.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg fill='%2315141a'%3E%3Ccircle cx='16' cy='3' r='2'/%3E%3Ccircle cx='22.5' cy='4.7' r='2'/%3E%3Ccircle cx='27.3' cy='9.5' r='2'/%3E%3Ccircle cx='29' cy='16' r='2'/%3E%3Ccircle cx='27.3' cy='22.5' r='2'/%3E%3Ccircle cx='22.5' cy='27.3' r='2'/%3E%3Ccircle cx='16' cy='29' r='2'/%3E%3Ccircle cx='9.5' cy='27.3' r='2'/%3E%3Ccircle cx='4.7' cy='22.5' r='2'/%3E%3Ccircle cx='3' cy='16' r='2'/%3E%3Ccircle cx='4.7' cy='9.5' r='2'/%3E%3Ccircle cx='9.5' cy='4.7' r='2'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='3' fill='%237f52ff'/%3E%3C/svg%3E">
+<link rel="alternate" type="text/markdown" href="docs.md" title="Kernelin documentation (Markdown)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
 <style>
-  :root {
-    --bg: #ffffff;
-    --surface: #f7f6f3;
-    --ink: #37352f;
-    --ink-2: #6b6a65;
-    --muted: #9b9a97;
-    --line: #e9e9e7;
-    --line-2: #dcdbd7;
-    --accent: #2a78d6;
-    --series-1: #2a78d6;
-    --series-2: #eb6834;
-    --good: #0f7b6c;
-    --good-bg: #dbeddb;
-    --warn: #9f6b00;
-    --warn-bg: #fdecc8;
-    --bad: #c4352f;
-    --bad-bg: #ffe2dd;
-    --blue-bg: #d3e5ef;
-    --gray-bg: #ebeced;
-    --code-bg: #f7f6f3;
-    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    --mono: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  /* ---------- hero ---------- */
+  .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 32px; align-items: center; padding: 72px 0 96px; }
+  .hero > *, .row > *, .sec-head > *, .panes > * { min-width: 0; }
+  .eyebrow { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 22px; }
+  .eyebrow .pill { border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 9px; color: var(--ink); background: var(--paper); }
+  .eyebrow a { color: var(--ink-2); }
+  h1 { font: 400 clamp(38px, 5.4vw, 62px)/1.06 var(--serif); letter-spacing: -0.025em; margin: 0 0 22px; }
+  h1 em { font-style: italic; }
+  .lede { max-width: 470px; margin: 0 0 28px; color: var(--ink); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .install {
+    display: flex; align-items: center; gap: 10px; margin-top: 30px; max-width: 470px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--paper); padding: 8px 8px 8px 14px;
   }
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font); }
-  .page { max-width: 920px; margin: 0 auto; padding: 40px 16px 80px; }
-  h1 { font-size: 32px; line-height: 1.2; margin: 6px 0 4px; font-weight: 700; letter-spacing: -0.01em; }
-  h2 { font-size: 19px; margin: 34px 0 8px; font-weight: 650; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-  h3 { font-size: 15px; margin: 18px 0 6px; font-weight: 650; }
-  p { margin: 4px 0 8px; }
-  a { color: inherit; text-decoration: underline; text-decoration-color: var(--line-2); }
-  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); color: #eb5757; padding: 1px 4px; border-radius: 4px; }
-  pre { font-family: var(--mono); font-size: 12px; line-height: 1.5; background: var(--code-bg); border-radius: 6px; padding: 12px 14px; overflow-x: auto; margin: 6px 0; }
-  pre code { background: none; color: var(--ink); padding: 0; font-size: inherit; }
-  .icon { font-size: 44px; line-height: 1; }
-  .subtitle { color: var(--ink-2); font-size: 15px; margin: 0 0 14px; }
+  .install code { flex: 1; min-width: 0; font-size: 12px; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .install code::-webkit-scrollbar { display: none; }
+  .install button { flex: none; font: 600 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 6px 9px; cursor: pointer; }
+  .install button:hover { border-color: var(--ink); }
 
-  /* Notion-style property list */
-  .props { display: grid; grid-template-columns: 150px 1fr; gap: 2px 8px; margin: 10px 0 18px; font-size: 13.5px; }
-  .props dt { color: var(--muted); padding: 3px 0; }
-  .props dd { margin: 0; padding: 3px 0; }
-  .tag { display: inline-block; padding: 0 7px; border-radius: 4px; font-size: 12.5px; line-height: 20px; white-space: nowrap; }
-  .tag.good { background: var(--good-bg); color: var(--good); }
-  .tag.warn { background: var(--warn-bg); color: var(--warn); }
-  .tag.bad { background: var(--bad-bg); color: var(--bad); }
-  .tag.blue { background: var(--blue-bg); color: #1f5e8c; }
-  .tag.gray { background: var(--gray-bg); color: var(--ink-2); }
+  .orb { position: relative; aspect-ratio: 1 / .86; }
+  .orb svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .orb .glow { position: absolute; inset: 6% 12%; border-radius: 50%; background: radial-gradient(closest-side, rgba(127,82,255,.42), rgba(199,17,225,.14) 55%, transparent); filter: blur(28px); animation: breathe 7s ease-in-out infinite; }
+  @keyframes breathe { 50% { transform: scale(1.06); opacity: .85; } }
+  .orb .spin { transform-origin: 260px 220px; animation: spin 24s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .orb text { font: 10px var(--mono); fill: var(--ink-2); letter-spacing: .02em; }
 
-  .callout { display: flex; gap: 10px; background: var(--surface); border-radius: 6px; padding: 12px 14px; margin: 10px 0; }
-  .callout .ci { font-size: 18px; line-height: 1.3; }
-  .callout p { margin: 0 0 4px; }
-  .callout.blue { background: #e7f3f8; }
-  .callout.yellow { background: #fbf3db; }
+  /* ---------- stats strip ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line-strong); }
+  .stat { padding: 26px 22px 24px 0; }
+  .stat + .stat { padding-left: 22px; border-left: 1px solid var(--line); }
+  .stat .v { font: 400 40px/1 var(--serif); letter-spacing: -.02em; }
+  .stat .k { margin-top: 8px; font-size: 11px; color: var(--ink-2); line-height: 1.5; }
 
-  /* stat tiles */
-  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 14px; }
-  .tile { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
-  .tile .k { color: var(--muted); font-size: 12px; }
-  .tile .v { font-size: 24px; font-weight: 700; line-height: 1.25; }
-  .tile .s { color: var(--ink-2); font-size: 12px; }
+  /* ---------- feature rows ---------- */
+  section { scroll-margin-top: 20px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; padding: 36px 0; border-bottom: 1px solid var(--line-strong); }
+  .row.flip .art { order: 2; }
+  .row h2, .sec-head h2 { font: 400 clamp(28px, 3.2vw, 36px)/1.14 var(--serif); letter-spacing: -0.02em; margin: 0 0 16px; }
+  .row p, .sec-head p { margin: 0 0 22px; max-width: 440px; }
+  .row .num, .sec-head .num { display: block; font-size: 10.5px; letter-spacing: .1em; color: var(--muted); margin-bottom: 14px; }
+  .art {
+    position: relative; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--paper);
+    min-height: 330px; overflow: hidden; isolation: isolate;
+  }
+  .art .bloom { position: absolute; z-index: -1; border-radius: 50%; filter: blur(40px); pointer-events: none; }
+  .bullets { list-style: none; margin: 0 0 24px; padding: 0; max-width: 440px; }
+  .bullets li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; padding: 6px 0; border-top: 1px dashed var(--line); font-size: 12.5px; }
+  .bullets li:last-child { border-bottom: 1px dashed var(--line); }
+  .bullets li::before { content: "→"; color: var(--purple); }
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0 10px; }
-  th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); padding: 6px 8px; white-space: nowrap; }
-  td { border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .scroll { overflow-x: auto; }
+  /* code compare (Kotlin in, WGSL out) */
+  .compare-wrap { padding: 36px 0 44px; border-bottom: 1px solid var(--line-strong); }
+  .sec-head { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: end; margin-bottom: 28px; }
+  .sec-head p { margin: 0; }
+  .compare { padding: 0; min-height: 0; }
+  .compare .bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tabs button { font: 500 11px var(--mono); padding: 5px 11px; border-radius: 999px; border: 1px solid transparent; background: none; cursor: pointer; color: var(--ink-2); }
+  .tabs button[aria-selected="true"] { border-color: var(--ink); color: var(--ink); background: var(--bg); }
+  .compare .hint { font-size: 10.5px; color: var(--muted); }
+  .panes { display: grid; grid-template-columns: minmax(0, .82fr) 40px minmax(0, 1.18fr); }
+  .pane { min-width: 0; padding: 14px 0 18px; }
+  .pane .label { display: flex; justify-content: space-between; padding: 0 16px 10px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .pane pre { margin: 0; font-size: 12px; line-height: 1.75; overflow-x: auto; }
+  .pane .ln { display: block; padding: 0 16px; white-space: pre; border-left: 2px solid transparent; transition: background .15s, border-color .15s; cursor: default; min-height: 1.75em; }
+  .pane .ln.on { background: rgba(127,82,255,.09); border-left-color: var(--purple); }
+  .pane .ln.dim { opacity: .45; }
+  .arrow-col { display: flex; align-items: center; justify-content: center; border-left: 1px dashed var(--line); border-right: 1px dashed var(--line); background: repeating-linear-gradient(180deg, transparent 0 6px, rgba(127,82,255,.05) 6px 7px); }
+  .arrow-col svg { width: 22px; height: 22px; }
+  .compare .foot-note { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 10.5px; color: var(--ink-2); }
+  .compare .foot-note b { color: var(--ink); font-weight: 600; }
+  .pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-right: 6px; animation: blink 1.6s ease-in-out infinite; vertical-align: 1px; }
+  @keyframes blink { 50% { opacity: .25; } }
 
-  /* checklist */
-  ul.check { list-style: none; padding: 0; margin: 4px 0 8px; }
-  ul.check li { display: flex; gap: 8px; padding: 2px 0; }
-  ul.check li .box { flex: none; width: 15px; height: 15px; margin-top: 3px; border: 1.5px solid var(--line-2); border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; }
-  ul.check li.done .box { background: var(--accent); border-color: var(--accent); }
-  ul.check li.done .t { color: var(--ink-2); text-decoration: line-through; text-decoration-color: var(--line-2); }
-  ul.check li.doing .box { border-color: var(--accent); }
+  /* race (CPU vs GPU) */
+  .race { padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 16px; }
+  .race .head { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; color: var(--ink-2); letter-spacing: .04em; }
+  .race .head b { font-weight: 600; color: var(--ink); }
+  .lane-title { display: flex; justify-content: space-between; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 7px; }
+  .lane-title span:last-child { font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; font-size: 12px; font-weight: 600; }
+  .cores { display: grid; gap: 4px; }
+  .core { height: 7px; border-radius: 4px; background: rgba(21,20,26,.06); overflow: hidden; }
+  .core i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 4px; }
+  .threads { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; }
+  .threads i { aspect-ratio: 1; border-radius: 2px; background: rgba(21,20,26,.07); transition: background .25s; }
+  .threads i.lit { background: var(--purple); }
+  .threads i.lit.alt { background: var(--magenta); }
+  .race .result { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px dashed var(--line); padding-top: 12px; font-size: 11px; color: var(--ink-2); }
+  .race .result b { font: 400 28px/1 var(--serif); color: var(--ink); }
+  .race button.again { font: 600 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--ink); border-radius: 999px; background: none; padding: 6px 11px; cursor: pointer; }
 
-  details { border-radius: 6px; margin: 4px 0; }
-  details > summary { cursor: pointer; padding: 3px 0; font-weight: 500; list-style: none; }
-  details > summary::-webkit-details-marker { display: none; }
-  details > summary::before { content: "▸"; display: inline-block; width: 16px; color: var(--muted); transition: transform .15s; }
-  details[open] > summary::before { transform: rotate(90deg); }
-  details > .inner { padding: 2px 0 6px 16px; }
+  /* compile error editor */
+  .editor { padding: 0; display: flex; flex-direction: column; }
+  .editor .titlebar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 10.5px; color: var(--ink-2); }
+  .editor .titlebar i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--line); }
+  .editor .titlebar span { margin-left: 8px; }
+  .editor pre { margin: 0; padding: 16px 0; font-size: 12px; line-height: 1.8; overflow-x: auto; flex: 1; }
+  .editor .ln { display: block; padding: 0 16px; white-space: pre; }
+  .editor .ln .g { color: var(--muted); display: inline-block; width: 22px; user-select: none; }
+  .squiggle { text-decoration: underline wavy var(--coral); text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  .editor .err {
+    margin: 0 14px 14px; border: 1px solid rgba(228,72,87,.45); background: #fff6f6; border-radius: 8px; padding: 10px 12px;
+    font-size: 11.5px; line-height: 1.6; color: #8c1d2a; position: relative;
+  }
+  .editor .err b { color: var(--coral); }
+  .editor .err::before { content: ""; position: absolute; top: -6px; left: 120px; width: 10px; height: 10px; background: #fff6f6; border-left: 1px solid rgba(228,72,87,.45); border-top: 1px solid rgba(228,72,87,.45); transform: rotate(45deg); }
+  .editor .ok { margin: 0 14px 14px; font-size: 11px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+  .editor .ok i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
 
-  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .cols > div { min-width: 0; }
-  .label { color: var(--muted); font-size: 12px; margin: 8px 0 2px; }
+  /* pipeline */
+  .pipeline { padding: 40px 0 48px; border-bottom: 1px solid var(--line-strong); }
+  .flow { position: relative; display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; margin-top: 8px; }
+  .flow .track { position: absolute; left: 8%; right: 8%; top: 27px; height: 1px; background: var(--line-strong); }
+  .flow .runner { position: absolute; top: 23px; left: 8%; width: 9px; height: 9px; border-radius: 50%; background: var(--purple); box-shadow: 0 0 0 5px rgba(127,82,255,.16), 0 0 18px rgba(127,82,255,.7); animation: run 6s cubic-bezier(.6,0,.4,1) infinite; }
+  @keyframes run { 0% { left: 8%; opacity: 0; } 6% { opacity: 1; } 94% { opacity: 1; } 100% { left: 91%; opacity: 0; } }
+  .step { position: relative; text-align: center; padding: 0 8px; }
+  .step .node {
+    width: 54px; height: 54px; margin: 0 auto 14px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--bg);
+    display: flex; align-items: center; justify-content: center; position: relative; z-index: 1;
+  }
+  .step .node svg { width: 24px; height: 24px; }
+  .step.hi .node { background: var(--ink); }
+  .step.hi .node svg { stroke: #fff; }
+  .step h3 { margin: 0 0 6px; font: 600 11.5px/1.4 var(--mono); letter-spacing: .02em; }
+  .step p { margin: 0; font-size: 11px; color: var(--ink-2); line-height: 1.6; }
+  .step .tag { display: inline-block; margin-bottom: 6px; font-size: 9.5px; letter-spacing: .1em; color: var(--muted); }
+  .backends { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 30px; font-size: 10.5px; color: var(--ink-2); }
+  .backends span { border: 1px dashed var(--line); border-radius: 999px; padding: 3px 10px; background: var(--paper); }
 
-  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; font-size: 13px; }
-  .flow .n { border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; background: #fff; }
-  .flow .n.hi { border-color: var(--accent); background: #eef5fd; }
-  .flow .a { color: var(--muted); }
+  /* benchmarks */
+  .bench { padding: 40px 0 48px; border-bottom: 1px solid var(--line-strong); }
+  .chart-card { padding: 22px 22px 16px; min-height: 0; }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 10.5px; color: var(--ink-2); margin-bottom: 14px; }
+  .chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .brow { display: grid; grid-template-columns: 96px 1fr 70px; align-items: center; gap: 12px; padding: 7px 0; }
+  .brow .name { font-size: 12px; }
+  .brow .name small { display: block; color: var(--muted); font-size: 10px; }
+  .brow .track { position: relative; height: 22px; }
+  .brow .track .gridline { position: absolute; top: -6px; bottom: -6px; width: 1px; background: var(--line); }
+  .brow .track .gridline.one { background: var(--ink); opacity: .35; }
+  .brow .b { position: absolute; left: 0; top: 3px; height: 16px; border-radius: 0 4px 4px 0; background: linear-gradient(90deg, rgba(127,82,255,.55), var(--purple)); width: 0; transition: width 1.1s cubic-bezier(.2,.8,.2,1); }
+  .brow .b.top { background: linear-gradient(90deg, var(--purple), var(--magenta) 70%, var(--coral)); }
+  .brow .x { text-align: right; font: 400 22px/1 var(--serif); font-variant-numeric: tabular-nums; }
+  .axis { display: grid; grid-template-columns: 96px 1fr 70px; gap: 12px; margin-top: 4px; }
+  .axis .ticks { position: relative; height: 16px; font-size: 9.5px; color: var(--muted); }
+  .axis .ticks span { position: absolute; transform: translateX(-50%); }
+  .bench-notes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 18px; border-top: 1px solid var(--line); }
+  .bench-notes div { padding: 14px 16px 0 0; font-size: 11px; color: var(--ink-2); }
+  .bench-notes div + div { padding-left: 16px; border-left: 1px solid var(--line); }
+  .bench-notes b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 4px; font-size: 11.5px; }
 
-  /* chart */
-  .chart { position: relative; margin: 6px 0 4px; }
-  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink-2); margin: 4px 0 2px; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
-  .tip { position: absolute; pointer-events: none; background: #fff; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(15,15,15,.08); white-space: nowrap; opacity: 0; transition: opacity .08s; }
-  .tip b { font-weight: 600; }
-  svg text { font-family: var(--font); }
+  /* docs section */
+  .docs { padding: 40px 0 48px; border-bottom: 1px solid var(--line-strong); }
+  .doc-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+  .doc-card {
+    display: flex; flex-direction: column; gap: 8px; min-height: 168px; padding: 20px 20px 18px; text-decoration: none;
+    border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); position: relative; transition: background .2s;
+  }
+  .doc-card:hover { background: var(--paper); }
+  .doc-card .n { font-size: 10px; letter-spacing: .1em; color: var(--muted); }
+  .doc-card h3 { margin: 0; font: 400 21px/1.2 var(--serif); letter-spacing: -.01em; }
+  .doc-card p { margin: 0; font-size: 11.5px; color: var(--ink-2); line-height: 1.6; }
+  .doc-card .go { margin-top: auto; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; opacity: 0; transform: translateX(-4px); transition: .2s; }
+  .doc-card:hover .go { opacity: 1; transform: none; }
+  .doc-card.ai { background: linear-gradient(135deg, rgba(127,82,255,.08), rgba(199,17,225,.05) 60%, rgba(228,72,87,.06)); }
+  .doc-card.ai .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .doc-card.ai .chips span { font-size: 10px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 1px 8px; background: var(--paper); }
+  .docs-cta { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-top: 22px; font-size: 11.5px; color: var(--ink-2); }
 
-  .log { font-size: 13px; }
-  .log .row { display: grid; grid-template-columns: 52px 1fr; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); }
-  .log .row span:first-child { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .footer { color: var(--muted); font-size: 12px; margin-top: 40px; }
+  /* closing call to action */
+  .closing { position: relative; text-align: center; padding: 100px 0 80px; }
+  .closing h2 { font: 400 clamp(32px, 4.4vw, 50px)/1.1 var(--serif); letter-spacing: -.025em; margin: 0 0 16px; }
+  .closing p { max-width: 620px; margin: 0 auto 26px; }
+  .closing .actions { justify-content: center; }
+  .sky { position: relative; overflow: hidden; }
+  .sky::before {
+    content: ""; position: absolute; left: 50%; top: 160px; width: 1900px; height: 1500px; transform: translateX(-50%); border-radius: 50%; z-index: -1;
+    background: radial-gradient(closest-side, #b9a6ff 0%, #c6b8ff 38%, rgba(214,204,255,.75) 62%, rgba(247,245,240,0) 100%);
+  }
+  .sky .foot .rule { border-color: rgba(21,20,26,.6); }
 
-  /* tabs */
-  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 6px 0 4px; }
-  .tabs a { text-decoration: none; padding: 7px 12px 8px; font-size: 14px; font-weight: 500; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 4px 4px 0 0; }
-  .tabs a:hover { background: var(--surface); }
-  .tabs a[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
-  .panel[hidden] { display: none; }
+  /* entrance */
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .8s ease, transform .8s ease; }
+  .reveal.in { opacity: 1; transform: none; }
 
-  /* goal tab */
-  .mission { border: 1px solid var(--line-2); border-left: 4px solid var(--accent); border-radius: 6px; padding: 14px 16px; margin: 18px 0 8px; }
-  .mission .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
-  .mission .v { font-size: 19px; font-weight: 650; line-height: 1.35; margin: 4px 0 6px; }
-  .mission p { margin: 0; color: var(--ink-2); }
-  .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 8px 0 12px; }
-  .card { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; min-width: 0; }
-  .card h4 { margin: 0 0 4px; font-size: 13.5px; font-weight: 650; }
-  .card p, .card ul { margin: 0; font-size: 13px; color: var(--ink-2); }
-  .card ul { padding-left: 16px; }
-  .ms-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-  .ms-head h2 { flex: 1 1 auto; }
-  .exit { background: var(--surface); border-radius: 6px; padding: 10px 14px; margin: 8px 0 4px; font-size: 13px; }
-  .exit b { display: block; margin-bottom: 2px; }
-  .exit ul { margin: 0; padding-left: 18px; }
-  td.area { white-space: nowrap; font-weight: 600; }
-
-  @media (max-width: 680px) {
-    .cards { grid-template-columns: 1fr; }
-    td.area { white-space: normal; }
-    .tiles { grid-template-columns: repeat(2, 1fr); }
-    .cols { grid-template-columns: 1fr; }
-    .props { grid-template-columns: 110px 1fr; }
-    h1 { font-size: 26px; }
+  @media (max-width: 960px) {
+    .hero { grid-template-columns: 1fr; padding: 40px 0 56px; gap: 8px; }
+    .orb { max-width: 520px; width: 100%; margin: 0 auto; order: -1; }
+    .row, .sec-head { grid-template-columns: 1fr; gap: 28px; }
+    .row.flip .art { order: 0; }
+    .flow { grid-template-columns: repeat(3, 1fr); row-gap: 30px; }
+    .flow .track, .flow .runner { display: none; }
+    .doc-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 640px) {
+    body { font-size: 13px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stat, .stat + .stat { padding: 20px 12px 18px 0; border-left: 0; }
+    .stat:nth-child(even) { padding-left: 14px; border-left: 1px solid var(--line); }
+    .stat:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+    .stat .v { font-size: 32px; }
+    .panes { grid-template-columns: 1fr; }
+    .arrow-col { height: 34px; border: 0; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); }
+    .arrow-col svg { transform: rotate(90deg); }
+    .flow { grid-template-columns: 1fr 1fr; }
+    .brow, .axis { grid-template-columns: 74px 1fr 52px; gap: 8px; }
+    .brow .x { font-size: 18px; }
+    .bench-notes { grid-template-columns: 1fr; }
+    .bench-notes div + div { padding-left: 0; border-left: 0; }
+    .doc-grid { grid-template-columns: 1fr; }
+    .doc-card { min-height: 0; }
+    .doc-card .go { opacity: 1; transform: none; }
+    .threads { grid-template-columns: repeat(24, 1fr); }
+    .closing { padding: 72px 0 60px; }
+    .sky::before { top: 120px; }
   }
 </style>
 </head>
 <body>
-<div class="page">
 
-  <div class="icon">⚡</div>
-  <h1>Kernelin</h1>
-  <p class="subtitle">Write GPU kernels in plain Kotlin. A K2 compiler plugin turns them into WebGPU (WGSL) code that runs on any GPU.</p>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 32 32">
+    <g fill="currentColor">
+      <circle cx="16" cy="3" r="1.7"/><circle cx="22.5" cy="4.7" r="1.7"/><circle cx="27.3" cy="9.5" r="1.7"/>
+      <circle cx="29" cy="16" r="1.7"/><circle cx="27.3" cy="22.5" r="1.7"/><circle cx="22.5" cy="27.3" r="1.7"/>
+      <circle cx="16" cy="29" r="1.7"/><circle cx="9.5" cy="27.3" r="1.7"/><circle cx="4.7" cy="22.5" r="1.7"/>
+      <circle cx="3" cy="16" r="1.7"/><circle cx="4.7" cy="9.5" r="1.7"/><circle cx="9.5" cy="4.7" r="1.7"/>
+    </g>
+    <circle cx="16" cy="16" r="2.6" fill="#7f52ff"/>
+  </symbol>
+</svg>
 
-  <nav class="tabs" role="tablist">
-    <a href="#report" role="tab" id="t-report" aria-controls="tab-report" aria-selected="true">📊 Report</a>
-    <a href="#goal" role="tab" id="t-goal" aria-controls="tab-goal" aria-selected="false">🎯 Goal</a>
+<div class="toplog"><button type="button" data-open-logs aria-haspopup="dialog">logs</button></div>
+
+<header class="wrap">
+  <nav class="nav" aria-label="Main">
+    <ul>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#benchmarks">Benchmarks</a></li>
+      <li><a href="#docs">Docs</a></li>
+      <li><a href="demo/">Live demo</a></li>
+      <li><a href="https://github.com/rajumark/kernelin">GitHub</a></li>
+    </ul>
+    <a class="logo" href="./" aria-label="Kernelin home">
+      <svg><use href="#mark"/></svg>
+    </a>
+    <div class="right">
+      <a class="btn dark" href="docs.html#quick-start">Get started</a>
+      <button class="menu-btn" type="button" aria-label="Menu" aria-expanded="false"><span></span></button>
+    </div>
   </nav>
+</header>
 
-  <div class="panel" id="tab-report" role="tabpanel" aria-labelledby="t-report">
-  <dl class="props">
-    <dt>Status</dt><dd><span class="tag good">v0.1.0 released on Maven Central</span> <span class="tag good">MVP done</span> <span class="tag blue">Kotlin → GPU verified on real hardware</span></dd>
-    <dt>Phase</dt><dd>Step 0 ✓ · MVP ✓ · <b>0.1.0 published</b> · v1.0 next</dd>
-    <dt>Last updated</dt><dd>2026-10-16</dd>
-    <dt>Tests</dt><dd><span class="tag good">21 / 21 passing</span> · every generated shader validated by naga</dd>
-    <dt>Stack</dt><dd>Kotlin 2.4.21 (K2) · Kotlin Multiplatform (JVM + Wasm) · JDK 21 · Gradle 9.6 · WebGPU</dd>
-    <dt>Tested on</dt><dd>Apple M5 (10 CPU cores, 8-core GPU, Metal) · WebGPU in Chromium 152</dd>
-    <dt>Live demo</dt><dd><a href="demo/"><b>Try it in your browser →</b></a> zoom a fractal computed on your GPU from plain Kotlin</dd>
-    <dt>Use it</dt><dd><code>plugins { id("io.github.rajumark.kernelin") version "0.1.0" }</code> · from <a href="https://central.sonatype.com/namespace/io.github.rajumark">Maven Central</a> · JVM and Multiplatform · Kotlin 2.4.21 · see <a href="https://github.com/rajumark/kernelin/tree/main/examples">examples/</a></dd>
-    <dt>CI</dt><dd><a href="https://github.com/rajumark/kernelin/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/rajumark/kernelin/actions/workflows/ci.yml/badge.svg" style="vertical-align:middle;height:20px"></a> builds, tests and runs both examples on every push</dd>
-    <dt>License</dt><dd>Apache 2.0</dd>
-    <dt>Repository</dt><dd><a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a></dd>
-    <dt>Location</dt><dd><code>~/Documents/kotlin/kernelin</code></dd>
-  </dl>
+<main>
+  <!-- ======== HERO ======== -->
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <div class="eyebrow"><span class="pill">v0.1.0</span> <a href="https://central.sonatype.com/artifact/io.github.rajumark/kernelin-runtime">on Maven Central</a> · K2 compiler plugin</div>
+        <h1>Write GPU kernels<br>in <em>plain</em> <span class="kotlin-text">Kotlin</span>.</h1>
+        <p class="lede">Add <b>@Kernel</b> to a Kotlin function. At compile time Kernelin translates it into a WGSL compute shader that runs on any GPU through WebGPU, and the same function still runs on the CPU for your unit tests.</p>
+        <div class="actions">
+          <a class="btn dark" href="docs.html#quick-start">Get started <span class="arr">→</span></a>
+          <a class="btn ghost" href="demo/">Run the live demo</a>
+        </div>
+        <div class="install" aria-label="Gradle plugin">
+          <code id="install-line" data-lang="kotlin">id("io.github.rajumark.kernelin") version "0.1.0"</code>
+          <button type="button" data-copy="install-line">Copy</button>
+        </div>
+      </div>
 
-  <div class="callout blue">
-    <div class="ci">💡</div>
-    <div>
-      <p><b>In one line:</b> you add <code>@Kernel</code> to a normal Kotlin function, build, and Kernelin writes GPU code for it. The same function still runs on the CPU, so you can unit test it.</p>
-      <p>Today, 6 sample kernels compile to valid GPU code; the 5 benchmarked ones run on the M5 GPU and match the Kotlin CPU results. The heaviest one runs <b>118× faster</b> than all 10 CPU cores.</p>
-      <p>👉 <a href="demo/"><b>Open the live demo</b></a>: a Mandelbrot computed on your own GPU by Kernelin-generated code, with a CPU vs GPU race button.</p>
+      <div class="orb" aria-hidden="true">
+        <div class="glow"></div>
+        <svg viewBox="0 0 520 440" fill="none">
+          <defs>
+            <path id="m1" d="M260 30 A 70 190 0 1 1 260 410 A 70 190 0 1 1 260 30"/>
+            <path id="m2" d="M260 30 A 130 190 0 1 0 260 410 A 130 190 0 1 0 260 30"/>
+            <path id="m3" d="M260 30 A 190 190 0 1 1 260 410 A 190 190 0 1 1 260 30"/>
+            <path id="m4" d="M260 30 A 30 190 0 1 0 260 410 A 30 190 0 1 0 260 30"/>
+            <path id="m5" d="M260 30 A 160 190 0 1 1 260 410 A 160 190 0 1 1 260 30"/>
+            <path id="m6" d="M260 30 A 100 190 0 1 0 260 410 A 100 190 0 1 0 260 30"/>
+          </defs>
+          <g stroke="#15141a" stroke-width=".9" opacity=".8">
+            <ellipse cx="260" cy="220" rx="10" ry="190"/>
+            <ellipse cx="260" cy="220" rx="30" ry="190"/>
+            <ellipse cx="260" cy="220" rx="70" ry="190"/>
+            <ellipse cx="260" cy="220" rx="100" ry="190"/>
+            <ellipse cx="260" cy="220" rx="130" ry="190"/>
+            <ellipse cx="260" cy="220" rx="160" ry="190"/>
+            <ellipse cx="260" cy="220" rx="190" ry="190"/>
+          </g>
+          <ellipse cx="260" cy="220" rx="190" ry="34" stroke="#15141a" stroke-width=".7" stroke-dasharray="2 5" opacity=".55"/>
+          <!-- centre: the kernel -->
+          <g class="spin">
+            <g fill="#15141a">
+              <circle cx="260" cy="199" r="2.2"/><circle cx="270.5" cy="201.8" r="2.2"/><circle cx="278.2" cy="209.5" r="2.2"/>
+              <circle cx="281" cy="220" r="2.2"/><circle cx="278.2" cy="230.5" r="2.2"/><circle cx="270.5" cy="238.2" r="2.2"/>
+              <circle cx="260" cy="241" r="2.2"/><circle cx="249.5" cy="238.2" r="2.2"/><circle cx="241.8" cy="230.5" r="2.2"/>
+              <circle cx="239" cy="220" r="2.2"/><circle cx="241.8" cy="209.5" r="2.2"/><circle cx="249.5" cy="201.8" r="2.2"/>
+            </g>
+          </g>
+          <circle cx="260" cy="220" r="3.4" fill="#7f52ff"/>
+          <!-- threads travelling along the meridians -->
+          <g stroke="#15141a" stroke-width=".9">
+            <circle r="6" fill="#7f52ff"><animateMotion dur="14s" repeatCount="indefinite"><mpath href="#m1"/></animateMotion></circle>
+            <circle r="6" fill="#e44857"><animateMotion dur="19s" repeatCount="indefinite" begin="-6s"><mpath href="#m2"/></animateMotion></circle>
+            <circle r="6" fill="#f0a43a"><animateMotion dur="23s" repeatCount="indefinite" begin="-3s"><mpath href="#m3"/></animateMotion></circle>
+            <circle r="6" fill="#2fa36b"><animateMotion dur="11s" repeatCount="indefinite" begin="-8s"><mpath href="#m4"/></animateMotion></circle>
+            <circle r="6" fill="#c711e1"><animateMotion dur="17s" repeatCount="indefinite" begin="-12s"><mpath href="#m5"/></animateMotion></circle>
+            <circle r="6" fill="#e2d6b8"><animateMotion dur="21s" repeatCount="indefinite" begin="-15s"><mpath href="#m6"/></animateMotion></circle>
+            <circle r="6" fill="#7f52ff"><animateMotion dur="23s" repeatCount="indefinite" begin="-14s"><mpath href="#m3"/></animateMotion></circle>
+          </g>
+          <!-- labels -->
+          <g>
+            <line x1="260" y1="30" x2="260" y2="10" stroke="#15141a" stroke-width=".7"/>
+            <text x="268" y="14">@Kernel fun saxpy(…)</text>
+            <line x1="260" y1="410" x2="260" y2="430" stroke="#15141a" stroke-width=".7"/>
+            <text x="268" y="434">@workgroup_size(64)</text>
+            <line x1="450" y1="220" x2="474" y2="220" stroke="#15141a" stroke-width=".7"/>
+            <text x="478" y="216">globalId()</text>
+            <text x="478" y="230">0 … n-1</text>
+          </g>
+        </svg>
+      </div>
+    </section>
+  </div>
+
+  <!-- ======== STATS ======== -->
+  <div class="wrap">
+    <hr class="rule">
+    <div class="stats reveal">
+      <div class="stat"><div class="v">118×</div><div class="k">faster than all 10 CPU cores<br>on an Apple M5 (waves)</div></div>
+      <div class="stat"><div class="v">0</div><div class="k">lines of WGSL you write<br>by hand</div></div>
+      <div class="stat"><div class="v">2</div><div class="k">places it runs: GPU via WebGPU,<br>CPU for unit tests</div></div>
+      <div class="stat"><div class="v">100%</div><div class="k">of generated shaders checked<br>by the naga validator in tests</div></div>
     </div>
   </div>
 
-  <!-- ============================================================ BENCHMARK -->
-  <h2>📊 Benchmark</h2>
-  <div class="tiles">
-    <div class="tile"><div class="k">Best GPU speedup</div><div class="v">118×</div><div class="s">waves, vs all 10 CPU cores</div></div>
-    <div class="tile"><div class="k">vs 1 CPU core</div><div class="v">816×</div><div class="s">waves: 3.78 s → 4.6 ms</div></div>
-    <div class="tile"><div class="k">Mandelbrot 2048²</div><div class="v">4.5 ms</div><div class="s">CPU all cores: 101 ms</div></div>
-    <div class="tile"><div class="k">Correct results</div><div class="v">5 / 5</div><div class="s">GPU output = Kotlin CPU output</div></div>
+  <!-- ======== 01 KOTLIN IN, WGSL OUT ======== -->
+  <div class="wrap">
+    <section class="compare-wrap" id="how">
+      <div class="sec-head reveal">
+        <div>
+          <span class="num">01 / TRANSLATE</span>
+          <h2>Kotlin in. WGSL out.<br>Nothing to hand-write.</h2>
+        </div>
+        <p>A K2 compiler plugin reads your function's IR right after type checking and emits a compute shader. Arrays become storage buffers, <b>Int</b> and <b>Float</b> parameters move into a uniform, and <b>globalId()</b> becomes the GPU thread index. Hover a Kotlin line to see what it became.</p>
+      </div>
+      <div class="art compare reveal">
+        <div class="bloom" style="width:420px;height:260px;right:-80px;bottom:-140px;background:rgba(127,82,255,.22)"></div>
+        <div class="bar">
+          <div class="tabs" role="tablist" aria-label="Example kernels">
+            <button role="tab" aria-selected="true" data-k="saxpy">saxpy</button>
+            <button role="tab" aria-selected="false" data-k="mandelbrot">mandelbrot</button>
+            <button role="tab" aria-selected="false" data-k="blur">blur</button>
+          </div>
+          <span class="hint">real compiler output · Kotlin 2.4.21</span>
+        </div>
+        <div class="panes">
+          <div class="pane"><div class="label"><span>Kernels.kt</span><span>Kotlin</span></div><pre id="pane-kt"></pre></div>
+          <div class="arrow-col" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#7f52ff" stroke-width="1.5" stroke-linecap="round"><path d="M4 12h15M14 6l6 6-6 6"/></svg>
+          </div>
+          <div class="pane"><div class="label"><span id="wgsl-name">saxpy.wgsl</span><span>WGSL</span></div><pre id="pane-wgsl"></pre></div>
+        </div>
+        <div class="foot-note">
+          <span><span class="pulse"></span><b>naga</b> validated</span>
+          <span>read / read_write access detected automatically</span>
+          <span>bounds check added for you</span>
+        </div>
+      </div>
+    </section>
   </div>
 
-  <h3>GPU speedup vs Kotlin on all 10 CPU cores</h3>
-  <p style="color:var(--ink-2);font-size:13px;margin:0">Log scale. Right of the line means the GPU is faster; left of the line means it's slower.</p>
-  <div class="legend">
-    <span><i style="background:var(--series-1)"></i>GPU, kernel only (data already on GPU)</span>
-    <span><i style="background:var(--series-2)"></i>GPU, including data upload + download</span>
+  <!-- ======== 02 CPU + GPU ======== -->
+  <div class="wrap">
+    <section class="row">
+      <div class="art race reveal" id="race" aria-label="CPU versus GPU race">
+        <div class="bloom" style="width:520px;height:260px;left:50%;bottom:-170px;transform:translateX(-50%);background:rgba(240,120,80,.55)"></div>
+        <div class="head"><span><b>waves</b> · 4,194,304 elements · 64 rounds of sin/cos</span><span>measured</span></div>
+        <div>
+          <div class="lane-title"><span>CPU · 10 cores · JVM</span><span id="cpu-ms">0 ms</span></div>
+          <div class="cores" id="cores"></div>
+        </div>
+        <div>
+          <div class="lane-title"><span>GPU · Apple M5 · WebGPU</span><span id="gpu-ms">0 ms</span></div>
+          <div class="threads" id="threads"></div>
+        </div>
+        <div class="result">
+          <span>Same Kotlin function.<br>Same results (100% match).</span>
+          <b id="race-x">118×</b>
+          <button class="again" type="button" id="race-again">Race again</button>
+        </div>
+      </div>
+      <div class="reveal">
+        <span class="num">02 / ONE FUNCTION, TWO ENGINES</span>
+        <h2>Test it on the CPU.<br>Ship it to the GPU.</h2>
+        <p>A kernel is still a normal Kotlin function. Run it with <b>KernelinCpu</b> in a plain unit test, step through it in the debugger, then send the very same code to the GPU. No second language, no copy that drifts out of sync.</p>
+        <ul class="bullets">
+          <li><span><b>KernelinCpu.dispatch</b> runs every thread on one core, great for tests</span></li>
+          <li><span><b>dispatchParallel</b> spreads it across all JVM cores</span></li>
+          <li><span><b>WebGpu.create()</b> runs it on the real GPU from Kotlin/Wasm</span></li>
+        </ul>
+        <a class="btn dark" href="docs.html#run-on-the-cpu">See both runners <span class="arr">→</span></a>
+      </div>
+    </section>
   </div>
-  <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
 
-  <div class="scroll">
-  <table id="bench-table">
-    <thead><tr>
-      <th>Kernel</th><th>What it does</th><th class="num">Elements</th>
-      <th class="num">CPU 1 core</th><th class="num">CPU 10 cores</th>
-      <th class="num">GPU kernel</th><th class="num">GPU end-to-end</th><th class="num">Correct</th>
-    </tr></thead>
-    <tbody></tbody>
-  </table>
+  <!-- ======== 03 COMPILE ERRORS ======== -->
+  <div class="wrap">
+    <section class="row flip">
+      <div class="art editor reveal">
+        <div class="bloom" style="width:300px;height:220px;right:-60px;top:-90px;background:rgba(228,72,87,.18)"></div>
+        <div class="titlebar"><i></i><i></i><i></i><span>Kernels.kt — gradle build</span></div>
+<pre><span class="ln"><span class="g">1</span><span class="tok-k">fun</span> <span class="tok-f">fact</span>(n: <span class="tok-t">Int</span>): <span class="tok-t">Int</span> = <span class="tok-k">if</span> (n &lt;= <span class="tok-n">1</span>) <span class="tok-n">1</span> <span class="tok-k">else</span> n * <span class="squiggle"><span class="tok-f">fact</span>(n - <span class="tok-n">1</span>)</span></span><span class="ln"><span class="g">2</span></span><span class="ln"><span class="g">3</span><span class="tok-a">@Kernel</span></span><span class="ln"><span class="g">4</span><span class="tok-k">fun</span> <span class="tok-f">factorials</span>(out: <span class="tok-t">IntArray</span>) {</span><span class="ln"><span class="g">5</span>    <span class="tok-k">val</span> i = <span class="tok-f">globalId</span>()</span><span class="ln"><span class="g">6</span>    out[i] = <span class="tok-f">fact</span>(i)</span><span class="ln"><span class="g">7</span>}</span></pre>
+        <div class="err"><b>e:</b> Kernels.kt:1:48 Kernelin: recursion isn't allowed on the GPU ('fact' calls itself) (in @Kernel factorials)</div>
+        <div class="ok"><i></i>Fix: write <code>fact</code> as a <code>for</code> loop → builds, runs on CPU and GPU</div>
+      </div>
+      <div class="reveal">
+        <span class="num">03 / SAFE BY CONSTRUCTION</span>
+        <h2>Errors at compile time,<br>not on the GPU.</h2>
+        <p>If your kernel uses something a GPU can't run (strings, <b>Double</b>, <b>Long</b>, lambdas, recursion, exceptions, nullable types) you get a normal Kotlin compiler error with file, line and a hint. In the IDE and in CI, before anything ships.</p>
+        <ul class="bullets">
+          <li><span>Clear messages that say what to write instead</span></li>
+          <li><span>Every shader validated by naga, and kernels proven equal to Kotlin on a real GPU in CI</span></li>
+          <li><span>The manifest tells hosts exactly how to bind buffers</span></li>
+        </ul>
+        <a class="btn dark" href="docs.html#what-you-can-write-in-a-kernel">What you can write <span class="arr">→</span></a>
+      </div>
+    </section>
   </div>
 
-  <div class="callout">
-    <div class="ci">🌐</div>
-    <div><p><b>Live demo race (all Kotlin, in the browser):</b> 1600 × 1000 Mandelbrot, 400 iterations. GPU via the Kotlin WebGPU host: <b>10 ms</b>. The same Kotlin kernel compiled to Wasm on 1 CPU core: <b>672 ms</b>. That's <b>67× faster</b>, with 99.75% identical pixels. <a href="demo/">Try it yourself →</a></p></div>
+  <!-- ======== 04 PIPELINE ======== -->
+  <div class="wrap">
+    <section class="pipeline">
+      <div class="sec-head reveal">
+        <div>
+          <span class="num">04 / INSIDE THE COMPILER</span>
+          <h2>From <span class="kotlin-text">.kt</span> to silicon<br>in one build step.</h2>
+        </div>
+        <p>Kernelin plugs into the Kotlin compiler as an IR generation extension. It runs before any platform lowering, so loops, <b>&amp;&amp;</b>, <b>++</b> and <b>+=</b> still have their original shape and map cleanly onto WGSL.</p>
+      </div>
+      <div class="flow reveal">
+        <div class="track"></div><div class="runner"></div>
+        <div class="step">
+          <div class="node"><svg viewBox="0 0 24 24" fill="none" stroke="#15141a" stroke-width="1.4"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13l-2 2 2 2M15 13l2 2-2 2"/></svg></div>
+          <span class="tag">SOURCE</span><h3>@Kernel fun</h3><p>Plain Kotlin in commonMain or jvm</p>
+        </div>
+        <div class="step">
+          <div class="node"><svg viewBox="0 0 24 24" fill="none" stroke="#15141a" stroke-width="1.4"><path d="M4 7h16M4 12h10M4 17h13"/><circle cx="19" cy="12" r="2"/></svg></div>
+          <span class="tag">K2 FRONTEND</span><h3>Resolve + check</h3><p>Types and calls are resolved by the K2 compiler</p>
+        </div>
+        <div class="step hi">
+          <div class="node"><svg viewBox="0 0 24 24" fill="none" stroke="#15141a" stroke-width="1.4"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M12 7v4M12 11l-5 5M12 11l5 5"/></svg></div>
+          <span class="tag">KERNELIN</span><h3>IR → WGSL</h3><p>Walks the IR tree and writes a compute shader</p>
+        </div>
+        <div class="step">
+          <div class="node"><svg viewBox="0 0 24 24" fill="none" stroke="#15141a" stroke-width="1.4"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h5M8 15h7"/></svg></div>
+          <span class="tag">OUTPUT</span><h3>.wgsl + manifest</h3><p>Shader plus a JSON map of bindings</p>
+        </div>
+        <div class="step">
+          <div class="node"><svg viewBox="0 0 24 24" fill="none" stroke="#15141a" stroke-width="1.4"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div>
+          <span class="tag">EMBED</span><h3>kernelSource(::k)</h3><p>The call is replaced by the shader at compile time</p>
+        </div>
+        <div class="step">
+          <div class="node"><svg viewBox="0 0 24 24" fill="none" stroke="#15141a" stroke-width="1.4"><rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></div>
+          <span class="tag">RUN</span><h3>WebGPU</h3><p>Dispatched in workgroups of 64 threads</p>
+        </div>
+      </div>
+      <div class="backends reveal"><span>Metal</span><span>Vulkan</span><span>Direct3D 12</span><span>Chrome · Edge · Safari · Firefox</span><span>Android via WebGPU</span></div>
+    </section>
   </div>
 
-  <details>
-    <summary>How this was measured, and what the numbers mean</summary>
-    <div class="inner">
-      <p><b>CPU:</b> the <code>@Kernel</code> functions running as normal Kotlin on JDK 21 through <code>KernelinCpu</code>, 2 warmups then the median of 5 runs. "10 cores" uses <code>dispatchParallel</code>.</p>
-      <p><b>GPU kernel:</b> the generated WGSL on WebGPU (Chromium → Dawn → Metal) with data already on the GPU. It's the average of 20 back-to-back dispatches, median of 5.</p>
-      <p><b>GPU end-to-end:</b> upload the inputs, run once and copy the results back to JavaScript. This is what a real app pays for a one-off call.</p>
-      <p><b>Correct:</b> every output element is compared with the Kotlin CPU result. Floats are allowed a 1e-4 relative error.</p>
-      <p><b>Honest notes:</b></p>
-      <ul>
-        <li><b>Simple kernels</b> (vectorAdd, saxpy, blur) do almost no math per element. The kernel itself is 4–10× faster, but copying 64–200 MB to the GPU and back costs more than it saves, so <b>end-to-end they're slower than the CPU</b>. The GPU pays off when data stays on the GPU or the math is heavy.</li>
-        <li><b>Mandelbrot 99.82%</b>: 0.18% of pixels (on the set's edge) get an iteration count that differs by a few. GPUs fuse multiply-add, which rounds slightly differently than the JVM. This is expected for chaotic float math, not a bug.</li>
-        <li>CPU and GPU ran in different runtimes (JVM vs browser). The JVM CPU baseline carries a small per-element dispatch overhead; a hand-written loop would be somewhat faster.</li>
-        <li>Raw data: <code>benchmarks/2026-10-15-apple-m5.json</code></li>
-      </ul>
+  <!-- ======== 05 BENCHMARKS ======== -->
+  <div class="wrap">
+    <section class="bench" id="benchmarks">
+      <div class="sec-head reveal">
+        <div>
+          <span class="num">05 / BENCHMARKS</span>
+          <h2>Real numbers,<br>honestly measured.</h2>
+        </div>
+        <p>GPU kernel time versus the same Kotlin code on all 10 CPU cores of an Apple M5. Heavy math wins big. Light kernels win only when data stays on the GPU; copying it there and back costs more than the work.</p>
+      </div>
+      <div class="art chart-card reveal">
+        <div class="chart-legend">
+          <span><i style="background:var(--purple)"></i>GPU speedup, data already on the GPU (log scale)</span>
+          <span><i style="background:var(--ink);opacity:.35;width:2px"></i>1× = same as CPU</span>
+        </div>
+        <div id="bars"></div>
+        <div class="axis"><span></span><div class="ticks" id="ticks"></div><span></span></div>
+        <div class="bench-notes">
+          <div><b>Machine</b>Apple M5, 10 CPU cores, 8-core GPU. WebGPU in Chromium (Dawn → Metal).</div>
+          <div><b>Method</b>GPU: mean of 20 dispatches, median of 5. CPU: KernelinCpu on JDK 21, median of 5 after warmup.</div>
+          <div><b>Correctness</b>GPU output equals the Kotlin CPU output for all 5 kernels (mandelbrot: 99.8% of pixels, float rounding).</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ======== 06 DOCS ======== -->
+  <div class="wrap">
+    <section class="docs" id="docs">
+      <div class="sec-head reveal">
+        <div>
+          <span class="num">06 / DOCUMENTATION</span>
+          <h2>Everything you need,<br>for humans and for agents.</h2>
+        </div>
+        <p>From your first kernel to the binding layout of the generated shader. The whole guide is also published as one Markdown file, so an AI coding agent can read it and write correct kernels on the first try.</p>
+      </div>
+      <div class="doc-grid reveal">
+        <a class="doc-card" href="docs.html#quick-start"><span class="n">01</span><h3>Quick start</h3><p>Add the Gradle plugin, write a kernel, run it on the CPU and print its WGSL. Five minutes.</p><span class="go">Read →</span></a>
+        <a class="doc-card" href="docs.html#what-you-can-write-in-a-kernel"><span class="n">02</span><h3>Writing kernels</h3><p>Types, loops, helpers and kotlin.math: exactly which Kotlin the GPU accepts, and why.</p><span class="go">Read →</span></a>
+        <a class="doc-card" href="docs.html#run-on-the-gpu"><span class="n">03</span><h3>Running on the GPU</h3><p>Use the Kotlin/Wasm WebGPU host, pass scalars and buffers, and read results back.</p><span class="go">Read →</span></a>
+        <a class="doc-card" href="docs.html#api-reference"><span class="n">04</span><h3>API reference</h3><p>@Kernel, globalId, kernelSource, KernelinCpu, WebGpu, GpuKernel, GpuData, KernelManifest.</p><span class="go">Read →</span></a>
+        <a class="doc-card" href="docs.html#how-the-compiler-works"><span class="n">05</span><h3>Compiler internals</h3><p>How IR becomes WGSL, the binding layout, the manifest format and the error pipeline.</p><span class="go">Read →</span></a>
+        <a class="doc-card ai" href="docs.html#for-ai-agents"><span class="n">06 · AI READY</span><h3>For AI agents</h3><p>A strict rule sheet, copy-paste templates and machine-readable docs for coding agents.</p><span class="chips"><span>llms.txt</span><span>docs.md</span><span>AGENTS.md</span></span><span class="go">Read →</span></a>
+      </div>
+      <div class="docs-cta reveal">
+        <span>Open source · Apache 2.0 · built for Kotlin 2.4.21</span>
+        <a class="btn dark" href="docs.html">Read the full documentation <span class="arr">→</span></a>
+      </div>
+    </section>
+  </div>
+
+  <!-- ======== CLOSING + FOOTER ======== -->
+  <div class="sky">
+    <div class="wrap">
+      <section class="closing reveal">
+        <h2>Put your Kotlin on the GPU today</h2>
+        <p>One line in your Gradle build. Kernelin compiles your <b>@Kernel</b> functions into WebGPU shaders and ships them inside your app, on every platform.</p>
+        <div class="actions">
+          <a class="btn dark" href="docs.html#quick-start">Get started <span class="arr">→</span></a>
+          <a class="btn ghost" href="https://github.com/rajumark/kernelin">Star on GitHub</a>
+        </div>
+      </section>
+      <hr class="rule">
+      <footer class="foot">
+        <div class="grid">
+          <div class="brand">
+            <a class="logo" href="./"><svg><use href="#mark"/></svg><span class="word">kernelin</span></a>
+            <div class="meta">
+              <div><span id="clock">--:--</span> at your location</div>
+              <div><span class="dot" id="gpu-dot"></span><span id="gpu-state">Checking WebGPU…</span></div>
+            </div>
+          </div>
+          <div><h4>Product</h4><ul><li><a href="#how">How it works</a></li><li><a href="#benchmarks">Benchmarks</a></li><li><a href="demo/">Live demo</a></li></ul></div>
+          <div><h4>Docs</h4><ul><li><a href="docs.html#quick-start">Quick start</a></li><li><a href="docs.html#api-reference">API reference</a></li><li><a href="docs.html#for-ai-agents">For AI agents</a></li><li><a href="llms.txt">llms.txt</a></li></ul></div>
+          <div><h4>Project</h4><ul><li><a href="https://github.com/rajumark/kernelin">GitHub</a></li><li><a href="https://central.sonatype.com/artifact/io.github.rajumark/kernelin-runtime">Maven Central</a></li><li><a href="https://github.com/rajumark/kernelin/blob/main/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/rajumark/kernelin/blob/main/LICENSE">License</a></li></ul></div>
+          <div class="cta"><a class="btn dark" href="docs.html#quick-start">Get started</a></div>
+        </div>
+        <div class="legal">
+          <span>© 2026 rajumark · Apache License 2.0</span>
+          <span>Kotlin is a trademark of JetBrains s.r.o. Kernelin is an independent project.</span>
+        </div>
+      </footer>
     </div>
-  </details>
-
-  <!-- ============================================================ HOW IT WORKS -->
-  <h2>⚙️ How it works</h2>
-  <div class="flow">
-    <span class="n">Kotlin <code>@Kernel fun</code></span><span class="a">→</span>
-    <span class="n">K2 compiler (FIR)</span><span class="a">→</span>
-    <span class="n">Kotlin IR</span><span class="a">→</span>
-    <span class="n hi">Kernelin plugin: IR → WGSL</span><span class="a">→</span>
-    <span class="n">WGSL embedded via <code>kernelSource(::k)</code></span><span class="a">→</span>
-    <span class="n">Kotlin WebGPU host (Wasm)</span><span class="a">→</span>
-    <span class="n">WebGPU</span><span class="a">→</span>
-    <span class="n">Metal / Vulkan / DX12</span><span class="a">→</span>
-    <span class="n">GPU</span>
   </div>
-  <p>The plugin reads the Kotlin IR right after type checking, before any JVM lowering, so loops, <code>&amp;&amp;</code>, <code>++</code> and <code>+=</code> still have their original shape. Arrays become GPU storage buffers, <code>Int</code>/<code>Float</code> parameters go into a uniform struct, and <code>globalId()</code> becomes the GPU thread index. Unsupported code becomes a normal compiler error with file and line.</p>
-  <p><b>Getting the shader into your program:</b> call <code>kernelSource(::myKernel)</code>. The plugin replaces that call at compile time with the generated WGSL and its parameter layout, so it works the same on the JVM and in WebAssembly, with no files or reflection. The Kotlin host then runs it:</p>
-<pre><code>val gpu = WebGpu.create()                                   // kernelin-webgpu (Kotlin/Wasm)
-val kernel = gpu.load(kernelSource(::mandelbrotView))       // shader embedded by the compiler
-val result = kernel.run(
-    size = width * height,
-    scalars = mapOf("width" to width, "height" to height, "maxIter" to 400, ...),
-    buffers = mapOf("out" to GpuData.empty(width * height)),
-)</code></pre>
+</main>
 
-  <div class="cols">
-    <div>
-      <div class="label">You write (Kotlin)</div>
-<pre><code>@Kernel
-fun mandelbrot(out: IntArray, width: Int,
-               height: Int, maxIter: Int) {
-    val id = globalId()
-    val px = id % width
-    val py = id / width
-    val x0 = px.toFloat() / width * 3.5f - 2.5f
-    val y0 = py.toFloat() / height * 2.0f - 1.0f
-    var x = 0f
-    var y = 0f
-    var iter = 0
-    while (x * x + y * y &lt;= 4f &amp;&amp; iter &lt; maxIter) {
-        val xt = x * x - y * y + x0
-        y = 2f * x * y + y0
-        x = xt
-        iter++
-    }
-    out[id] = iter
-}</code></pre>
-    </div>
-    <div>
-      <div class="label">Kernelin generates (WGSL, body)</div>
-<pre><code>let id: i32 = i32(kernelin_id);
-let px: i32 = (id % kernelin_params.width);
-let py: i32 = (id / kernelin_params.width);
-let x0: f32 = (((f32(px) / f32(kernelin_params.width))
-               * 3.5f) - 2.5f);
-let y0: f32 = (((f32(py) / f32(kernelin_params.height))
-               * 2.0f) - 1.0f);
-var x: f32 = 0.0f;
-var y: f32 = 0.0f;
-var iter: i32 = 0i;
-while (((((x * x) + (y * y)) &lt;= 4.0f)
-        &amp;&amp; (iter &lt; kernelin_params.maxIter))) {
-  let xt: f32 = (((x * x) - (y * y)) + x0);
-  y = (((2.0f * x) * y) + y0);
-  x = xt;
-  iter++;
-}
-out[id] = iter;</code></pre>
-    </div>
+<!-- logs: private build log behind a PIN -->
+<div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
+  <div class="box">
+    <svg width="34" height="34" style="color:var(--ink)"><use href="#mark"/></svg>
+    <h3 id="gate-title">Build logs</h3>
+    <p>Enter the 4-digit PIN to open the project log.</p>
+    <label class="pins">
+      <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="4-digit PIN">
+      <span class="cell"></span><span class="cell"></span><span class="cell"></span><span class="cell"></span>
+    </label>
+    <div class="msg" aria-live="polite"></div>
+    <div class="gate-actions"><button class="btn ghost" type="button" data-close>Cancel</button></div>
   </div>
-
-  <div class="label">A clear compiler error for code the GPU can't run</div>
-<pre><code>Kernels.kt:10:17: error: Kernelin: lambdas aren't supported in kernels yet ('repeat' takes one); use a for loop (in @Kernel bad)
-Kernels.kt:5:60:  error: Kernelin: recursion isn't allowed on the GPU ('fact' calls itself) (in @Kernel bad)</code></pre>
-
-  <!-- ============================================================ SCOPE -->
-  <h2>🎯 Scope: what's supported right now</h2>
-  <div class="scroll">
-  <table>
-    <thead><tr><th>Area</th><th>Supported ✅</th><th>Not yet ❌</th></tr></thead>
-    <tbody>
-      <tr><td><b>Kernel parameters</b></td><td><code>FloatArray</code>, <code>IntArray</code> (become storage buffers; read-only or read-write detected automatically), <code>Int</code>, <code>Float</code></td><td>Boolean params, <code>Double</code>, <code>Long</code>, 2D arrays, structs</td></tr>
-      <tr><td><b>Local types</b></td><td><code>Int</code>, <code>Float</code>, <code>Boolean</code>, <code>val</code> / <code>var</code></td><td>data classes (Vec2…), <code>UInt</code>, <code>Half</code></td></tr>
-      <tr><td><b>Operators</b></td><td><code>+ - * / %</code>, unary minus, <code>++ --</code>, <code>+= -= *= /=</code>, comparisons, <code>== !=</code>, <code>&amp;&amp; || !</code>, <code>and or xor shl shr ushr inv</code>, mixed Int/Float</td><td>—</td></tr>
-      <tr><td><b>Control flow</b></td><td><code>if / else if / else</code>, <code>if</code> and <code>when</code> as values, <code>when (x)</code> with a subject, <code>return</code></td><td>labeled <code>break@outer</code>, <code>when</code> with <code>in</code> ranges</td></tr>
-      <tr><td><b>Loops</b></td><td><code>for</code> over <code>until</code>, <code>..</code>, <code>..&lt;</code>, <code>downTo</code>, <code>step</code>, <code>array.indices</code>; <code>while</code>; <code>do-while</code>; <code>break</code>, <code>continue</code></td><td><code>repeat { }</code>, <code>forEach { }</code> (lambdas)</td></tr>
-      <tr><td><b>Math</b></td><td><code>sqrt sin cos tan asin acos atan atan2 sinh cosh tanh exp ln log2 log10 pow hypot floor ceil round truncate abs sign min max</code>, <code>coerceIn / AtLeast / AtMost</code></td><td>random numbers</td></tr>
-      <tr><td><b>Functions</b></td><td>your own top-level helpers and extension functions with Int/Float/Boolean params (become WGSL <code>fn</code>s)</td><td>passing arrays to helpers, default args, generics</td></tr>
-      <tr><td><b>GPU features</b></td><td><code>globalId()</code> (1D, scales past 4M threads via 2D dispatch), <code>array.size</code></td><td>2D/3D ids, shared (workgroup) memory, barriers, atomics</td></tr>
-      <tr><td><b>Safety</b></td><td>compiler errors with file:line for strings, Double, Long, lambdas, recursion, exceptions, casts, nullable types, library calls; WGSL keyword clashes auto-renamed</td><td>IDE red underlines while typing (needs FIR checkers)</td></tr>
-      <tr><td><b>Running</b></td><td>CPU: <code>KernelinCpu.dispatch</code> / <code>dispatchParallel</code>. GPU from Kotlin: <code>kernelSource(::k)</code> + <code>WebGpu</code> / <code>GpuKernel.run()</code> on Kotlin/Wasm in any WebGPU browser. Kernels compile to JVM and Wasm from one <code>commonMain</code>.</td><td>GPU from the JVM (desktop, needs wgpu), Android native, iOS, typed <code>kernel.run(a, b)</code> API</td></tr>
-      <tr><td><b>Setup</b></td><td><code>plugins { id("io.github.rajumark.kernelin") version "0.1.0" }</code> for Kotlin JVM and Multiplatform, from Maven Central (<code>io.github.rajumark:kernelin-*</code>)</td><td>Gradle Plugin Portal (the plugin needs <code>mavenCentral()</code> in plugin repositories); Kotlin versions other than 2.4.21</td></tr>
-    </tbody>
-  </table>
-  </div>
-
-  <!-- ============================================================ ROADMAP -->
-  <h2>🗺️ Progress</h2>
-  <h3>Step 0: Foundation <span class="tag good">done</span></h3>
-  <ul class="check">
-    <li class="done"><span class="box">✓</span><span class="t">Gradle multi-module project (runtime, compiler plugin, Gradle plugin, samples)</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Pinned Kotlin 2.4.21 + JDK 21 toolchain</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Compiler plugin finds <code>@Kernel</code> functions inside the real K2 compiler</span></li>
-  </ul>
-  <h3>MVP <span class="tag good">done</span></h3>
-  <ul class="check">
-    <li class="done"><span class="box">✓</span><span class="t">Runtime: <code>@Kernel</code>, <code>globalId()</code>, CPU runner (1 core + all cores)</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">IR → WGSL translator: types, operators, if/when, all loop kinds, math, helper functions</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Shaders + JSON manifest written into the jar, readable with <code>KernelinShaders</code></span></li>
-    <li class="done"><span class="box">✓</span><span class="t">naga validates every generated shader in tests</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Clear compiler errors with source locations</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Runs on a real GPU (M5 via WebGPU) with results matching the CPU</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Benchmarks: 5 kernels, CPU vs GPU</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Live demo page on GitHub Pages: zoomable Mandelbrot, CPU vs GPU race, Kotlin and WGSL side by side</span></li>
-    <li class="done"><span class="box">✓</span><span class="t"><code>kernelSource(::kernel)</code>: the compiler embeds the shader in your program</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Runtime and samples are Kotlin Multiplatform: same kernels compile to JVM and Wasm</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Kotlin GPU host (<code>kernelin-webgpu</code>, Kotlin/Wasm). The demo now runs on it, and its CPU side is the real Kotlin kernel.</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Gradle plugin: <code>id("io.github.rajumark.kernelin")</code> sets up JVM and Multiplatform projects (adds runtime, and the WebGPU host for Wasm)</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Example projects (<code>examples/hello-jvm</code>, <code>examples/hello-multiplatform</code>) that use only the plugin</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">Maven publishing for all modules (with POM, sources, Apache 2.0 license); works with <code>publishToMavenLocal</code></span></li>
-    <li class="done"><span class="box">✓</span><span class="t">GitHub Actions CI: build, tests with naga, both examples</span></li>
-    <li class="done"><span class="box">✓</span><span class="t">README, push to GitHub</span></li>
-    <li class="done"><span class="box">✓</span><span class="t"><b>Published v0.1.0 to Maven Central</b> (<code>io.github.rajumark:kernelin-*</code>, signed), then verified with fresh projects that use only Maven Central: JVM, Wasm and the GPU</span></li>
-    <li><span class="box"></span><span class="t">Demo video</span></li>
-  </ul>
-  <h3>v1.0 <span class="tag gray">planned</span></h3>
-  <ul class="check">
-    <li><span class="box"></span><span class="t">FIR checkers: red underlines in the IDE while typing</span></li>
-    <li><span class="box"></span><span class="t">Small structs (<code>Vec2</code>, <code>Vec3</code>), 2D/3D thread ids, shared memory</span></li>
-    <li><span class="box"></span><span class="t">Android on your Motorola via AndroidX WebGPU</span></li>
-    <li><span class="box"></span><span class="t">Simple API: <code>blur.runOnGpu(input, output)</code></span></li>
-    <li><span class="box"></span><span class="t">Publish to Maven Central, docs site, blog post, Kotlin Slack, KotlinConf talk proposal</span></li>
-  </ul>
-  <p style="color:var(--ink-2);font-size:13px">Version 2 and 3, the mission and the long-term vision are on the <a href="#goal">🎯 Goal</a> tab.</p>
-
-  <!-- ============================================================ NEXT -->
-  <h2>⏭️ Next plan (short)</h2>
-  <ol>
-    <li><b>FIR checkers</b> so mistakes show up as red underlines in IntelliJ / Android Studio while typing, not only on build.</li>
-    <li><b>Android test</b> on your Motorola phone (the live demo in Chrome first, then AndroidX WebGPU natively).</li>
-    <li><b>Faster Kotlin CPU path:</b> remove the per-element lambda and <code>globalId()</code> overhead, so CPU baselines are fairer.</li>
-    <li><b>Demo video + announcement</b>: Kotlin Slack, Kotlin Weekly, a blog post.</li>
-  </ol>
-
-  <!-- ============================================================ PROJECT -->
-  <h2>📁 Project</h2>
-  <details open>
-    <summary>Structure</summary>
-    <div class="inner">
-<pre><code>kernelin/
-├── kernelin-runtime/          (JVM + Wasm) @Kernel, globalId(), KernelinCpu, kernelSource(), KernelManifest
-├── kernelin-compiler-plugin/  K2 plugin: IR → WGSL, and replaces kernelSource(::k) with the shader
-│   └── WgslKernelTranslator.kt   the core translator (~900 lines)
-├── kernelin-webgpu/           (Wasm) Kotlin WebGPU host: WebGpu, GpuKernel.run(), GpuData
-├── kernelin-gradle-plugin/    id("io.github.rajumark.kernelin"): one-line setup for JVM + Multiplatform
-├── samples/
-│   ├── src/commonMain/        6 example kernels (compiled to JVM, Wasm and WGSL)
-│   ├── src/jvmMain/           CPU benchmark   ·  src/jvmTest/  CPU tests
-│   ├── src/wasmJsMain/        Demo.kt: functions the live demo calls
-│   └── web/runner.html        benchmark runner: runs shaders, checks + times them
-├── examples/                  hello-jvm, hello-multiplatform: real projects using only the plugin
-├── .github/workflows/ci.yml   CI: build, test (with naga), run the examples
-├── benchmarks/                saved benchmark results
-├── docs/demo/                 live demo (GitHub Pages): page + Kotlin/Wasm build (wasm/)
-└── docs/index.html            this page (project report)</code></pre>
-    </div>
-  </details>
-  <details>
-    <summary>Commands</summary>
-    <div class="inner">
-<pre><code># build everything and run all tests (naga validates shaders if installed)
-gradle build
-
-# CPU benchmark + export data for the GPU runner
-gradle :samples:bench -Pout=&lt;folder&gt;
-# then serve &lt;folder&gt; over http and open runner.html in a WebGPU browser
-
-# run the examples (they use Kernelin from this repo through the Gradle plugin)
-cd examples/hello-jvm &amp;&amp; gradle run
-cd examples/hello-multiplatform &amp;&amp; gradle jvmRun
-
-# publish every module to ~/.m2 to try it in any other project
-gradle publishToMavenLocal
-
-# rebuild the Kotlin/Wasm demo (optimized, ~100 KB) into docs/demo after changing kernels
-gradle :samples:exportDemo
-
-# generated shaders land here
-samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
-    </div>
-  </details>
-  <details>
-    <summary>Decisions so far</summary>
-    <div class="inner">
-      <ul>
-        <li><b>Target WGSL first</b>: plain text, runs everywhere through WebGPU, easy to debug and validate.</li>
-        <li><b>Translate at IR level</b>, before lowering: loop and operator shapes are still clean, and types are fully resolved.</li>
-        <li><b>Plain Kotlin, not a DSL</b>: this is the difference from Kool/KorGE shader DSLs; kernels stay CPU-testable.</li>
-        <li><b>Shaders ship inside the jar</b> (written next to the classes), so no extra Gradle wiring is needed.</li>
-        <li><b>Kotlin 2.4.21 pinned</b>: the compiler plugin API changes between versions.</li>
-      </ul>
-    </div>
-  </details>
-  <details>
-    <summary>Known issues / limits</summary>
-    <div class="inner">
-      <ul>
-        <li>Out-of-bounds array access: Kotlin throws, the GPU clamps silently. A debug mode with bounds checks is planned.</li>
-        <li>Integer divide by zero: Kotlin throws, WGSL returns a defined value.</li>
-        <li>Gradle wrapper download timed out here, so the installed Gradle 9.6 is used (<code>gradle</code>, not <code>./gradlew</code>).</li>
-        <li>Deleting a kernel can leave its old <code>.wgsl</code> in the build folder until a clean build.</li>
-        <li>The Kotlin/Wasm CPU path is slower than plain JavaScript for this loop (672 ms vs 291 ms): each pixel goes through a lambda and a <code>globalId()</code> lookup. On the GPU this costs nothing; on the CPU it's planned work.</li>
-        <li>Kotlin/Wasm arrays live outside JavaScript memory, so uploading a Kotlin <code>IntArray</code>/<code>FloatArray</code> copies element by element. GPU outputs stay as JS typed arrays (no copy) unless you ask for <code>ints()</code>/<code>floats()</code>.</li>
-      </ul>
-    </div>
-  </details>
-
-  <!-- ============================================================ LOG -->
-  <h2>📝 Activity log</h2>
-  <div class="log">
-    <div class="row"><span>Oct 15</span><span>Project created: 4 modules, Kotlin 2.4.21, JDK 21, Gradle 9.6.</span></div>
-    <div class="row"><span>Oct 15</span><span>Compiler plugin + IR → WGSL translator written. All 5 sample kernels translated on the first build.</span></div>
-    <div class="row"><span>Oct 15</span><span>Installed naga 30 (WGSL validator); tests now validate every shader. 17 tests passing.</span></div>
-    <div class="row"><span>Oct 15</span><span>First real GPU run on the M5 via WebGPU: 5/5 kernels correct, up to 118× faster than 10 CPU cores.</span></div>
-    <div class="row"><span>Oct 15</span><span>Improvements: cleaner output (<code>x += y</code>, <code>i++</code>, no temp variables), clearer errors for Double and lambdas, fixed name clash with Kernelin's internal names, fixed benchmark output-buffer bug.</span></div>
-    <div class="row"><span>Oct 15</span><span>First commit <code>69175e6</code> on <code>main</code> (34 files), pushed to <a href="https://github.com/rajumark/kernelin">github.com/rajumark/kernelin</a>.</span></div>
-    <div class="row"><span>Oct 15</span><span>Project report published on GitHub Pages: <a href="https://rajumark.github.io/kernelin/">rajumark.github.io/kernelin</a>.</span></div>
-    <div class="row"><span>Oct 15</span><span><b>Live demo</b> added: new <code>mandelbrotView</code> kernel with Float zoom inputs (shader valid first try), reusable WebGPU host, CPU vs GPU race. On the M5: 1.6 M pixels in 7.8 ms on the GPU vs 291 ms in JavaScript on 1 core (37×). Works on phone screens too.</span></div>
-    <div class="row"><span>Oct 15</span><span><b>Kotlin/Wasm GPU host.</b> New <code>kernelSource(::k)</code> compiler feature embeds the shader in the program. Runtime and samples became Kotlin Multiplatform (JVM + Wasm). New <code>kernelin-webgpu</code> module drives WebGPU from Kotlin. The live demo now runs on it (100 KB Wasm), and the race is Kotlin vs Kotlin: GPU 10 ms vs Kotlin/Wasm CPU 672 ms (67×), 99.75% identical pixels. 21 tests passing.</span></div>
-    <div class="row"><span>Oct 15</span><span><b>Usable by other projects.</b> Gradle plugin <code>id("io.github.rajumark.kernelin")</code> works for JVM and Multiplatform. Two example projects verified: JVM prints the generated shader; Multiplatform ran the same kernel on the JVM (all cores) and on the M5 GPU from Kotlin/Wasm. Maven publishing + Apache 2.0 license. GitHub Actions CI added.</span></div>
-    <div class="row"><span>Oct 16</span><span><b>v0.1.0 released on Maven Central.</b> Coordinates <code>io.github.rajumark:kernelin-runtime</code>, <code>kernelin-webgpu</code>, <code>kernelin-compiler-plugin</code>, <code>kernelin-gradle-plugin</code>, plugin id <code>io.github.rajumark.kernelin</code> (packages renamed to match). Before upload: 21 tests, CI green, 38/38 signatures valid, all POMs complete, a stale-class bug caught and fixed. After release: fresh projects using only Maven Central passed on the JVM, in Wasm and on the M5 GPU.</span></div>
-  </div>
-
-  </div><!-- /tab-report -->
-
-  <!-- ============================================================ GOAL TAB -->
-  <div class="panel" id="tab-goal" role="tabpanel" aria-labelledby="t-goal" hidden>
-
-  <div class="mission">
-    <div class="k">Our one mission</div>
-    <div class="v">Make the GPU a normal Kotlin target: write a plain Kotlin function, test it on the CPU, run it on any GPU, and get the same answer.</div>
-    <p>Every feature must pass one test: <b>does it help a Kotlin developer run their own plain Kotlin code on a GPU, safely and fast?</b> If not, it waits.</p>
-  </div>
-
-  <!-- ------------------------------------------------ GOAL -->
-  <h2>🎯 Goal</h2>
-  <p>Kernelin becomes the <b>trusted, default way to use the GPU from Kotlin</b>, on every platform Kotlin runs on, good enough that companies ship it in production and JetBrains is happy to point people to it.</p>
-  <div class="cards">
-    <div class="card"><h4>1 · Plain Kotlin, no new language</h4><p>Kernels are normal Kotlin functions. No DSL, no WGSL strings, no annotations beyond <code>@Kernel</code>. If it compiles and the IDE shows no error, it runs on the GPU.</p></div>
-    <div class="card"><h4>2 · Same answer on CPU and GPU</h4><p>CPU and GPU results match, or differ only in documented, tested ways (float rounding). No silent wrong answers, ever.</p></div>
-    <div class="card"><h4>3 · Runs everywhere Kotlin runs</h4><p>One kernel, unchanged, on browser (Wasm), desktop JVM, Android and iOS, on Apple, NVIDIA, AMD, Intel, Qualcomm and ARM GPUs.</p></div>
-    <div class="card"><h4>4 · Fast enough to matter</h4><p>Generated code within ~20% of a hand-written shader on standard benchmarks, and data stays on the GPU between kernels so real apps actually get the speedup.</p></div>
-  </div>
-  <h3>How we measure it (north-star numbers)</h3>
-  <div class="scroll">
-  <table>
-    <thead><tr><th>Metric</th><th class="num">Today (0.1)</th><th class="num">v2 target</th><th class="num">v3 target</th></tr></thead>
-    <tbody>
-      <tr><td>Platforms where a kernel runs on the GPU</td><td class="num">1 (browser)</td><td class="num">4</td><td class="num">4 + server</td></tr>
-      <tr><td>GPU vendors tested in CI</td><td class="num">1 (Apple)</td><td class="num">4</td><td class="num">6</td></tr>
-      <tr><td>Kotlin versions supported</td><td class="num">1 (2.4.21)</td><td class="num">latest 3</td><td class="num">latest 3, new ones in ≤ 2 weeks</td></tr>
-      <tr><td>Speed vs hand-written WGSL</td><td class="num">not measured</td><td class="num">≥ 70%</td><td class="num">≥ 80–90%</td></tr>
-      <tr><td>Known CPU/GPU mismatches (beyond float tolerance)</td><td class="num">0 known, not fuzzed</td><td class="num">0, fuzzed</td><td class="num">0, fuzzed daily</td></tr>
-      <tr><td>Projects using it outside this repo</td><td class="num">0</td><td class="num">3+</td><td class="num">25+ incl. production apps</td></tr>
-      <tr><td>Maintainers</td><td class="num">1</td><td class="num">2+</td><td class="num">3+ from different companies</td></tr>
-    </tbody>
-  </table>
-  </div>
-
-  <!-- ------------------------------------------------ VISION -->
-  <h2>🔭 Vision</h2>
-  <p><b>"Kotlin everywhere" should include the GPU.</b> Today, Kotlin developers who need GPU speed must leave Kotlin: write WGSL, GLSL, Metal or CUDA by hand, or move the work to Python. We want a world where speeding up a loop on the GPU is as normal as moving it to a coroutine: change one annotation, keep your tests, ship.</p>
-  <p>In 3 years, a Kotlin developer should be able to:</p>
-  <ul>
-    <li>Apply an image filter in a Compose Multiplatform app on Android, iOS, desktop and web with <b>one</b> shared kernel.</li>
-    <li>Run physics, simulations or signal processing in a KMP library without a single line of shader code.</li>
-    <li>Do data and AI pre-processing on a server GPU from a Ktor app or a Kotlin Notebook, without Python.</li>
-    <li>See GPU mistakes as red underlines in IntelliJ IDEA while typing, and step through a kernel in the debugger on the CPU.</li>
-  </ul>
-
-  <h3>Thinking as JetBrains: why this helps Kotlin</h3>
-  <div class="cards">
-    <div class="card"><h4>Completes the Multiplatform story</h4><p>KMP shares business logic and Compose shares UI. Kernelin shares <b>compute</b>: heavy work written once, run on every device's GPU.</p></div>
-    <div class="card"><h4>A real reason to pick Kotlin/Wasm</h4><p>Kotlin/Wasm + WebGPU running near-native GPU code in the browser is a flagship demo that JavaScript and Python can't easily match.</p></div>
-    <div class="card"><h4>Kotlin for data and AI</h4><p>GPU access is the #1 thing Kotlin is missing against Python for numeric work. Kernelin can be the base layer for Kotlin Notebook, Multik and DataFrame users.</p></div>
-    <div class="card"><h4>Proof the K2 plugin API works</h4><p>A serious, well-tested K2 plugin outside JetBrains is a public showcase for the compiler plugin API, and gives JetBrains real feedback while they stabilize it.</p></div>
-    <div class="card"><h4>IntelliJ IDEA gets a unique feature</h4><p>"Show generated GPU code", GPU inspections and quick-fixes: tooling only a compiler-aware IDE can offer.</p></div>
-    <div class="card"><h4>Low cost to JetBrains</h4><p>Independent, Apache 2.0, follows Kotlin's own conventions. Easy to recommend, easy to adopt later.</p></div>
-  </div>
-  <h3>How we make it easy for JetBrains to support us</h3>
-  <ul>
-    <li><b>Follow Kotlin's rules:</b> Kotlin coding conventions, the Kotlin library authors' guidelines, Kotlin's binary compatibility rules, no "Kotlin" in our product name (trademark).</li>
-    <li><b>Never fork the compiler.</b> Only public plugin extension points; test against Kotlin dev builds and file clear YouTrack (KT) issues when the plugin API breaks.</li>
-    <li><b>Design in the open:</b> short design docs (KEEP style) for every big feature, so JetBrains engineers can review the direction early.</li>
-    <li><b>Be a good citizen:</b> show up on Kotlin Slack, give talks (KotlinConf, Kotlin Weekly), apply for the Kotlin Foundation ecosystem grants, and help other plugin authors.</li>
-  </ul>
-
-  <h3>What we will not do (to stay focused)</h3>
-  <ul>
-    <li>❌ Build a graphics or game engine (vertex/fragment shaders, render pipelines). We are <b>compute only</b>.</li>
-    <li>❌ Build a machine learning framework. Others can build one on top of Kernelin.</li>
-    <li>❌ Invent a DSL or a new language. If it's not plain Kotlin, it doesn't belong.</li>
-    <li>❌ Hide the GPU's cost. Copying data has a price; the API makes it visible.</li>
-    <li>❌ Add a new backend before the current one works on every platform.</li>
-  </ul>
-
-  <!-- ------------------------------------------------ GAPS -->
-  <h2>🧱 What's not supported yet</h2>
-  <p>An honest list of everything missing in 0.1.0, so we can plan instead of guess.</p>
-  <div class="scroll">
-  <table>
-    <thead><tr><th>Area</th><th>Missing today</th><th>Planned</th></tr></thead>
-    <tbody>
-      <tr><td class="area">Types</td><td><code>Double</code>, <code>Long</code>, <code>UInt</code>, <code>Short</code>/<code>Byte</code>, 16-bit floats, <code>Boolean</code> kernel parameters, data classes / structs (<code>Vec2</code>, <code>Vec3</code>, matrices), value classes, 2D arrays, fixed-size local arrays, nullable types</td><td><span class="tag blue">v1–v2</span></td></tr>
-      <tr><td class="area">Language</td><td>lambdas and inline functions (<code>repeat { }</code>, <code>forEach { }</code>), generics, default arguments in helpers, passing arrays to helpers, labeled <code>break@outer</code>, <code>when</code> with <code>in</code> ranges, top-level constants and objects</td><td><span class="tag blue">v2</span></td></tr>
-      <tr><td class="area">GPU features</td><td>2D/3D thread ids, choosing workgroup size (fixed at 64), shared (workgroup) memory, barriers, atomics, subgroup operations, textures/images, random numbers, reductions (sum, max), prefix scan, sort</td><td><span class="tag blue">v1–v3</span></td></tr>
-      <tr><td class="area">Runtime</td><td>GPU from the JVM (desktop/server), Android native, iOS, Kotlin/Native; buffers that stay on the GPU between runs; chaining kernels without copying back; typed API (<code>saxpy.gpu(a, x, y)</code>); automatic CPU fallback when there is no GPU; GPU timing; "device lost" recovery</td><td><span class="tag blue">v1–v2</span></td></tr>
-      <tr><td class="area">Backends</td><td>only WGSL. No direct SPIR-V (Vulkan), MSL (Metal) or CUDA</td><td><span class="tag gray">v3</span></td></tr>
-      <tr><td class="area">Safety</td><td>no bounds checks on the GPU (out-of-range reads are clamped silently), divide-by-zero differs from Kotlin, no fuzzing of CPU vs GPU results, only tested on one GPU vendor</td><td><span class="tag blue">v2</span></td></tr>
-      <tr><td class="area">IDE &amp; tooling</td><td>errors only on build (no red underlines while typing), no IntelliJ plugin ("show generated WGSL", gutter icons), no kernel debugger, no profiler, stale <code>.wgsl</code> files after deleting a kernel, Gradle configuration cache not verified</td><td><span class="tag blue">v1–v2</span></td></tr>
-      <tr><td class="area">Compatibility</td><td>works with exactly one Kotlin version (2.4.21); no Kotlin version matrix in CI; no public API compatibility check</td><td><span class="tag blue">v2</span></td></tr>
-      <tr><td class="area">Distribution</td><td>0.1.0 prepared but <b>not yet on Maven Central</b> or the Gradle Plugin Portal; no API docs (Dokka), no docs site</td><td><span class="tag warn">v1</span></td></tr>
-      <tr><td class="area">Community</td><td>no CONTRIBUTING, Code of Conduct, SECURITY policy, issue templates or design docs; one maintainer</td><td><span class="tag blue">v1–v2</span></td></tr>
-    </tbody>
-  </table>
-  </div>
-
-  <!-- ------------------------------------------------ INDUSTRY READY -->
-  <h2>🏭 Industry-ready checklist</h2>
-  <p>What a project needs before companies can bet their product on it. These are the standards we follow from v2 on.</p>
-  <details open>
-    <summary>Correctness &amp; safety</summary>
-    <div class="inner"><ul class="check">
-      <li><span class="box"></span><span class="t">Differential testing: every feature runs on CPU and GPU in CI and results are compared</span></li>
-      <li><span class="box"></span><span class="t">Fuzzing: a generator writes random valid kernels and checks CPU = GPU, daily</span></li>
-      <li><span class="box"></span><span class="t">Golden tests for generated WGSL; every shader validated by both naga and Tint (Chrome's compiler)</span></li>
-      <li><span class="box"></span><span class="t">Debug mode with bounds and divide-by-zero checks that report the Kotlin file and line</span></li>
-      <li><span class="box"></span><span class="t">A written "numeric semantics" page: float precision, overflow, NaN, rounding on every GPU</span></li>
-      <li><span class="box"></span><span class="t">Real-device test lab: Apple, NVIDIA, AMD, Intel, Qualcomm Adreno, ARM Mali</span></li>
-    </ul></div>
-  </details>
-  <details>
-    <summary>Compatibility &amp; stability</summary>
-    <div class="inner"><ul class="check">
-      <li><span class="box"></span><span class="t">Semantic versioning, a clear deprecation cycle, and a stable 1.x API</span></li>
-      <li><span class="box"></span><span class="t">Public API checked on every PR (Kotlin ABI validation / binary-compatibility-validator)</span></li>
-      <li><span class="box"></span><span class="t">CI matrix over the latest 3 Kotlin versions plus Kotlin dev builds; support new Kotlin releases within 2 weeks</span></li>
-      <li><span class="box"></span><span class="t">Works with Gradle configuration cache, build cache and incremental compilation</span></li>
-      <li><span class="box"></span><span class="t">Long-term support line for companies that can't upgrade every month</span></li>
-    </ul></div>
-  </details>
-  <details>
-    <summary>Performance</summary>
-    <div class="inner"><ul class="check">
-      <li><span class="box"></span><span class="t">Benchmark suite in CI with alerts when a change makes kernels slower</span></li>
-      <li><span class="box"></span><span class="t">Compared against hand-written WGSL (and CUDA on servers), published openly</span></li>
-      <li><span class="box"></span><span class="t">Budget for compile time: the plugin adds less than 5% to a build</span></li>
-      <li><span class="box"></span><span class="t">Data stays on the GPU; copies are explicit and measurable</span></li>
-    </ul></div>
-  </details>
-  <details>
-    <summary>Developer experience</summary>
-    <div class="inner"><ul class="check">
-      <li><span class="box"></span><span class="t">Red underlines and quick-fixes in IntelliJ IDEA and Android Studio (FIR checkers)</span></li>
-      <li><span class="box"></span><span class="t">Every error explains what to do instead, with a docs link</span></li>
-      <li><span class="box"></span><span class="t">Docs site: getting started in 5 minutes, guides, API reference (Dokka), cookbook</span></li>
-      <li><span class="box"></span><span class="t">Online playground: write a kernel, see the WGSL, run it on your GPU</span></li>
-      <li><span class="box"></span><span class="t">Project templates for Android, Compose Multiplatform, desktop and web</span></li>
-    </ul></div>
-  </details>
-  <details>
-    <summary>Release, security &amp; supply chain</summary>
-    <div class="inner"><ul class="check">
-      <li><span class="box"></span><span class="t">Automated, signed releases from CI only (no laptop releases), with build provenance</span></li>
-      <li><span class="box"></span><span class="t">Reproducible builds and an SBOM for every release</span></li>
-      <li><span class="box"></span><span class="t">SECURITY.md with a private way to report bugs; dependency scanning (Dependabot)</span></li>
-      <li><span class="box"></span><span class="t">The compiler plugin never touches the network and reads only the files it compiles</span></li>
-      <li><span class="box"></span><span class="t">Native GPU libraries (wgpu/Dawn) pinned, checksummed and updated on a schedule</span></li>
-    </ul></div>
-  </details>
-  <details>
-    <summary>Community &amp; governance</summary>
-    <div class="inner"><ul class="check">
-      <li><span class="box"></span><span class="t">CONTRIBUTING, Code of Conduct, issue and PR templates, "good first issue" labels</span></li>
-      <li><span class="box"></span><span class="t">Public roadmap (this page) and short design docs before big features</span></li>
-      <li><span class="box"></span><span class="t">Reply to new issues within 3 working days</span></li>
-      <li><span class="box"></span><span class="t">More than one maintainer, so the project survives any one person leaving</span></li>
-      <li><span class="box"></span><span class="t">Clear license (Apache 2.0) and DCO sign-off on contributions</span></li>
-    </ul></div>
-  </details>
-
-  <!-- ------------------------------------------------ V2 -->
-  <div class="ms-head"><h2>🚀 Version 2 milestone</h2><span class="tag blue">after v1.0</span></div>
-  <p><b>Theme: "Runs everywhere, safe by default."</b> v1.0 makes Kernelin usable (IDE errors, Vec types, 2D ids, Android, Maven Central). v2 makes it <b>trustworthy for real apps</b> on every Kotlin platform.</p>
-  <h3>Language</h3>
-  <ul class="check">
-    <li><span class="box"></span><span class="t">Data classes as GPU structs, including arrays of structs (<code>Array&lt;Particle&gt;</code>)</span></li>
-    <li><span class="box"></span><span class="t">Built-in <code>Vec2/3/4</code> and <code>Mat2/3/4</code> with operators</span></li>
-    <li><span class="box"></span><span class="t"><code>UInt</code>, <code>Short</code>, <code>Byte</code>, <code>Half</code> (f16), <code>Boolean</code> parameters, fixed-size local arrays</span></li>
-    <li><span class="box"></span><span class="t">Inline functions and lambdas (<code>repeat</code>, <code>forEach</code>), generics through inlining, default arguments, arrays passed to helpers</span></li>
-    <li><span class="box"></span><span class="t">Labeled break/continue, <code>when</code> with ranges, top-level <code>const val</code></span></li>
-  </ul>
-  <h3>GPU</h3>
-  <ul class="check">
-    <li><span class="box"></span><span class="t">Shared memory, barriers and atomics with safe Kotlin APIs</span></li>
-    <li><span class="box"></span><span class="t">Choose workgroup size per kernel (<code>@Kernel(workgroup = 256)</code>)</span></li>
-    <li><span class="box"></span><span class="t">Built-in reductions: <code>gpu.sum(x)</code>, <code>gpu.max(x)</code>, prefix scan</span></li>
-  </ul>
-  <h3>Runtime: one API on every platform</h3>
-  <ul class="check">
-    <li><span class="box"></span><span class="t">Desktop and server JVM through wgpu-native or Dawn (Java FFM)</span></li>
-    <li><span class="box"></span><span class="t">Android through AndroidX WebGPU; iOS and macOS through Kotlin/Native</span></li>
-    <li><span class="box"></span><span class="t">Typed calls generated by the compiler: <code>saxpy.gpu(alpha, x, y)</code></span></li>
-    <li><span class="box"></span><span class="t"><code>GpuBuffer</code> that stays on the GPU; chain kernels without copying back</span></li>
-    <li><span class="box"></span><span class="t">Automatic CPU fallback when no GPU is available; clean "device lost" recovery</span></li>
-  </ul>
-  <h3>Tooling &amp; quality</h3>
-  <ul class="check">
-    <li><span class="box"></span><span class="t">IntelliJ plugin: "Show generated WGSL", gutter icon on kernels, quick-fixes</span></li>
-    <li><span class="box"></span><span class="t">Debug mode with bounds checks pointing to the Kotlin line</span></li>
-    <li><span class="box"></span><span class="t">Fuzz testing, Kotlin version matrix, real devices from 4 GPU vendors in CI</span></li>
-    <li><span class="box"></span><span class="t">Docs site with API reference, playground, and Compose Multiplatform image-filter sample</span></li>
-  </ul>
-  <div class="exit">
-    <b>v2 is done when:</b>
-    <ul>
-      <li>The same kernel runs unchanged on browser, desktop JVM, Android and iOS.</li>
-      <li>Fuzzing finds no CPU/GPU mismatches beyond the documented float tolerance.</li>
-      <li>The 3 latest Kotlin versions are supported, and at least 3 outside projects use Kernelin.</li>
-    </ul>
-  </div>
-
-  <!-- ------------------------------------------------ V3 -->
-  <div class="ms-head"><h2>🌍 Version 3 milestone</h2><span class="tag gray">long term</span></div>
-  <p><b>Theme: "The standard GPU layer for Kotlin."</b> v3 is about scale: faster code, more hardware, and an ecosystem other libraries build on.</p>
-  <h3>Performance</h3>
-  <ul class="check">
-    <li><span class="box"></span><span class="t">Optimizer: kernel fusion (chain two kernels into one), memory coalescing hints, automatic tiling for shared memory</span></li>
-    <li><span class="box"></span><span class="t">Native backends next to WGSL: SPIR-V (Vulkan), MSL (Metal), and CUDA for NVIDIA servers</span></li>
-    <li><span class="box"></span><span class="t">Multi-GPU and async queues for servers; batching for many small jobs</span></li>
-  </ul>
-  <h3>Ecosystem</h3>
-  <ul class="check">
-    <li><span class="box"></span><span class="t">Ready-made libraries built on Kernelin: linear algebra (matrix multiply), image processing, FFT, sort</span></li>
-    <li><span class="box"></span><span class="t">Integrations: Compose Multiplatform effects, Kotlin Notebook, Multik / Kotlin DataFrame, Ktor</span></li>
-    <li><span class="box"></span><span class="t">Kernels published and shared as normal Maven libraries</span></li>
-  </ul>
-  <h3>Tooling</h3>
-  <ul class="check">
-    <li><span class="box"></span><span class="t">Kernel debugger: pick a GPU thread and step through it on the CPU in IntelliJ IDEA</span></li>
-    <li><span class="box"></span><span class="t">GPU profiler view: time per kernel, memory copies, occupancy hints</span></li>
-  </ul>
-  <h3>Project</h3>
-  <ul class="check">
-    <li><span class="box"></span><span class="t">Built on the stable K2 compiler plugin API once JetBrains releases it</span></li>
-    <li><span class="box"></span><span class="t">3+ maintainers from different companies, a design-doc process, LTS releases</span></li>
-    <li><span class="box"></span><span class="t">Recognized in the Kotlin ecosystem: KotlinConf talk, listed in official Kotlin docs or Kotlin Foundation programs</span></li>
-  </ul>
-  <div class="exit">
-    <b>v3 is done when:</b>
-    <ul>
-      <li>Kernelin code runs within 80–90% of hand-written shaders on standard benchmarks.</li>
-      <li>Production apps on Android, iOS and servers ship with Kernelin kernels.</li>
-      <li>Other open-source libraries depend on Kernelin as their GPU layer.</li>
-    </ul>
-  </div>
-
-  </div><!-- /tab-goal -->
-
-  <p class="footer">Kernelin · report updated 2026-10-16</p>
 </div>
 
+<script src="assets/site.js"></script>
 <script>
-const data = [
-  { name: "vectorAdd", what: "out = a + b", size: 16777216, cpu1: 24.815, cpuN: 6.955, gpuK: 1.82, gpuE: 29.8, match: 100 },
-  { name: "saxpy", what: "y += α·x", size: 16777216, cpu1: 24.027, cpuN: 8.726, gpuK: 1.645, gpuE: 20.7, match: 100 },
-  { name: "blur", what: "9-tap average", size: 16777216, cpu1: 79.275, cpuN: 20.369, gpuK: 1.985, gpuE: 21.5, match: 100 },
-  { name: "waves", what: "64 rounds sin/cos/sqrt + helper", size: 4194304, cpu1: 3777.425, cpuN: 545.625, gpuK: 4.63, gpuE: 10.0, match: 100 },
-  { name: "mandelbrot", what: "2048×2048, 256 iterations", size: 4194304, cpu1: 443.394, cpuN: 101.039, gpuK: 4.48, gpuE: 8.4, match: 99.82 },
-];
+(function () {
+  "use strict";
+  var H = window.KernelinSite;
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const fmtMs = (v) => v >= 1000 ? (v / 1000).toFixed(2) + " s" : (v >= 100 ? v.toFixed(0) : v.toFixed(v >= 10 ? 1 : 2)) + " ms";
-const fmtX = (v) => v >= 10 ? Math.round(v) + "×" : v.toFixed(v >= 1 ? 1 : 2) + "×";
-
-// table
-const tbody = document.querySelector("#bench-table tbody");
-for (const d of data) {
-  const tr = document.createElement("tr");
-  const tag = d.match === 100 ? '<span class="tag good">100%</span>' : `<span class="tag warn">${d.match}%</span>`;
-  tr.innerHTML = `<td><b>${d.name}</b></td><td>${d.what}</td><td class="num">${d.size.toLocaleString()}</td>` +
-    `<td class="num">${fmtMs(d.cpu1)}</td><td class="num">${fmtMs(d.cpuN)}</td>` +
-    `<td class="num"><b>${fmtMs(d.gpuK)}</b></td><td class="num">${fmtMs(d.gpuE)}</td><td class="num">${tag}</td>`;
-  tbody.appendChild(tr);
-}
-
-// chart: bars grow from the 1× line (CPU on all cores) on a log scale
-function drawChart() {
-  const host = document.getElementById("chart");
-  const tip = document.getElementById("tip");
-  host.querySelector("svg")?.remove();
-  const W = host.clientWidth;
-  const labelW = W < 520 ? 78 : 96;
-  const rowH = 46, barH = 14, top = 24, bottom = 28, right = 44;
-  const H = top + data.length * rowH + bottom;
-  const minL = Math.log10(0.1), maxL = Math.log10(300);
-  const x = (v) => labelW + (Math.log10(v) - minL) / (maxL - minL) * (W - labelW - right);
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("width", W); svg.setAttribute("height", H);
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", "GPU speedup over 10-core CPU per kernel, kernel-only and end-to-end");
-  const el = (tag, attrs, text) => {
-    const e = document.createElementNS(ns, tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
-    if (text != null) e.textContent = text;
-    svg.appendChild(e); return e;
+  // ---------- 01: Kotlin -> WGSL, with line mapping (real compiler output) ----------
+  // Each WGSL line is [kotlinLineIndex or -1, text].
+  var HEAD = function (fields, bindings) {
+    var out = [[1, "struct KernelinParams {"], [1, "  kernelin_size: u32,"]];
+    fields.forEach(function (f) { out.push([1, "  " + f + ","]); });
+    out.push([1, "}"], [-1, ""], [1, "@group(0) @binding(0) var<uniform> kernelin_params: KernelinParams;"]);
+    bindings.forEach(function (b) { out.push([1, b]); });
+    out.push([-1, ""], [-1, "var<private> kernelin_id: u32;"], [-1, ""],
+      [0, "@compute @workgroup_size(64)"],
+      [0, "fn main(@builtin(global_invocation_id) kernelin_gid: vec3<u32>, @builtin(num_workgroups) kernelin_nwg: vec3<u32>) {"],
+      [-1, "  kernelin_id = kernelin_gid.x + kernelin_gid.y * kernelin_nwg.x * 64u;"],
+      [-1, "  if (kernelin_id >= kernelin_params.kernelin_size) {"],
+      [-1, "    return;"],
+      [-1, "  }"]);
+    return out;
   };
-  // grid + axis ticks
-  for (const t of [0.1, 0.3, 1, 3, 10, 30, 100, 300]) {
-    const gx = x(t);
-    el("line", { x1: gx, x2: gx, y1: top, y2: H - bottom, stroke: t === 1 ? "#9b9a97" : "#efeeec", "stroke-width": t === 1 ? 1.5 : 1 });
-    el("text", { x: gx, y: H - bottom + 16, "text-anchor": "middle", "font-size": 11, fill: "#9b9a97" }, t + "×");
-  }
-  el("text", { x: x(1), y: 12, "font-size": 10.5, fill: "#6b6a65", "text-anchor": "middle" }, "CPU on 10 cores = 1×");
-  const bar = (v, y, color) => {
-    const x0 = x(1), x1 = x(v);
-    const left = Math.min(x0, x1), w = Math.max(2, Math.abs(x1 - x0));
-    // square at the 1× baseline, 4px rounded at the data end
-    const r = Math.min(4, w / 2), up = x1 >= x0;
-    const d = up
-      ? `M${left},${y} H${left + w - r} Q${left + w},${y} ${left + w},${y + r} V${y + barH - r} Q${left + w},${y + barH} ${left + w - r},${y + barH} H${left} Z`
-      : `M${left + w},${y} H${left + r} Q${left},${y} ${left},${y + r} V${y + barH - r} Q${left},${y + barH} ${left + r},${y + barH} H${left + w} Z`;
-    el("path", { d, fill: color });
-    el("text", { x: up ? left + w + 5 : left - 5, y: y + barH - 3, "font-size": 11, fill: "#37352f", "text-anchor": up ? "start" : "end" }, fmtX(v));
+  var KERNELS = {
+    saxpy: {
+      kt: ["@Kernel", "fun saxpy(alpha: Float, x: FloatArray, y: FloatArray) {", "    val i = globalId()", "    y[i] += alpha * x[i]", "}"],
+      wgsl: HEAD(["alpha: f32"], ["@group(0) @binding(1) var<storage, read> x: array<f32>;", "@group(0) @binding(2) var<storage, read_write> y: array<f32>;"]).concat([
+        [2, "  let i: i32 = i32(kernelin_id);"],
+        [3, "  y[i] += (kernelin_params.alpha * x[i]);"],
+        [4, "}"]]),
+    },
+    mandelbrot: {
+      kt: ["@Kernel", "fun mandelbrot(out: IntArray, width: Int, height: Int, maxIter: Int) {", "    val id = globalId()", "    val px = id % width", "    val py = id / width",
+        "    val x0 = px.toFloat() / width * 3.5f - 2.5f", "    val y0 = py.toFloat() / height * 2.0f - 1.0f", "    var x = 0f", "    var y = 0f", "    var iter = 0",
+        "    while (x * x + y * y <= 4f && iter < maxIter) {", "        val xt = x * x - y * y + x0", "        y = 2f * x * y + y0", "        x = xt", "        iter++", "    }", "    out[id] = iter", "}"],
+      wgsl: HEAD(["width: i32", "height: i32", "maxIter: i32"], ["@group(0) @binding(1) var<storage, read_write> out: array<i32>;"]).concat([
+        [2, "  let id: i32 = i32(kernelin_id);"],
+        [3, "  let px: i32 = (id % kernelin_params.width);"],
+        [4, "  let py: i32 = (id / kernelin_params.width);"],
+        [5, "  let x0: f32 = (((f32(px) / f32(kernelin_params.width)) * 3.5f) - 2.5f);"],
+        [6, "  let y0: f32 = (((f32(py) / f32(kernelin_params.height)) * 2.0f) - 1.0f);"],
+        [7, "  var x: f32 = 0.0f;"], [8, "  var y: f32 = 0.0f;"], [9, "  var iter: i32 = 0i;"],
+        [10, "  while (((((x * x) + (y * y)) <= 4.0f) && (iter < kernelin_params.maxIter))) {"],
+        [11, "    let xt: f32 = (((x * x) - (y * y)) + x0);"],
+        [12, "    y = (((2.0f * x) * y) + y0);"], [13, "    x = xt;"], [14, "    iter++;"], [15, "  }"],
+        [16, "  out[id] = iter;"], [17, "}"]]),
+    },
+    blur: {
+      kt: ["@Kernel", "fun blur(input: FloatArray, out: FloatArray) {", "    val i = globalId()", "    val n = input.size", "    var sum = 0f", "    var count = 0",
+        "    for (d in -4..4) {", "        val j = i + d", "        if (j >= 0 && j < n) {", "            sum += input[j]", "            count++", "        }", "    }", "    out[i] = sum / count", "}"],
+      wgsl: HEAD([], ["@group(0) @binding(1) var<storage, read> input: array<f32>;", "@group(0) @binding(2) var<storage, read_write> out: array<f32>;"]).concat([
+        [2, "  let i: i32 = i32(kernelin_id);"], [3, "  let n: i32 = i32(arrayLength(&input));"],
+        [4, "  var sum: f32 = 0.0f;"], [5, "  var count: i32 = 0i;"],
+        [6, "  {"], [6, "    let kernelin_end: i32 = 4i;"], [6, "    for (var d: i32 = -4i; d <= kernelin_end; d = d + 1i) {"],
+        [7, "      let j: i32 = (i + d);"], [8, "      if (((j >= 0i) && (j < n))) {"], [9, "        sum += input[j];"], [10, "        count++;"],
+        [11, "      }"], [12, "    }"], [12, "  }"], [13, "  out[i] = (sum / f32(count));"], [14, "}"]]),
+    },
   };
-  data.forEach((d, i) => {
-    const y = top + i * rowH + 6;
-    el("text", { x: 0, y: y + barH + 2, "font-size": 12.5, fill: "#37352f", "font-weight": 600 }, d.name);
-    const k = d.cpuN / d.gpuK, e = d.cpuN / d.gpuE;
-    bar(k, y, "#2a78d6");
-    bar(e, y + barH + 2, "#eb6834");
-    // hit area larger than the marks
-    const hit = el("rect", { x: 0, y: y - 4, width: W, height: rowH - 4, fill: "transparent" });
-    hit.addEventListener("mousemove", (ev) => {
-      const r = host.getBoundingClientRect();
-      tip.innerHTML = `<b>${d.name}</b> · ${d.size.toLocaleString()} elements<br>` +
-        `CPU 10 cores: ${fmtMs(d.cpuN)}<br>` +
-        `GPU kernel: ${fmtMs(d.gpuK)} → <b>${fmtX(k)}</b><br>` +
-        `GPU end-to-end: ${fmtMs(d.gpuE)} → <b>${fmtX(e)}</b>`;
-      tip.style.opacity = 1;
-      const tx = Math.min(ev.clientX - r.left + 12, W - tip.offsetWidth - 4);
-      tip.style.left = tx + "px"; tip.style.top = (ev.clientY - r.top + 12) + "px";
+
+  var paneKt = document.getElementById("pane-kt");
+  var paneW = document.getElementById("pane-wgsl");
+  var current = "saxpy", auto = null, autoLine = 0, hovering = false;
+
+  function render(name) {
+    current = name;
+    var k = KERNELS[name];
+    paneKt.innerHTML = k.kt.map(function (l, i) { return '<span class="ln" data-i="' + i + '">' + H.highlight(l, "kotlin") + "</span>"; }).join("");
+    paneW.innerHTML = k.wgsl.map(function (p) { return '<span class="ln" data-k="' + p[0] + '">' + H.highlight(p[1], "wgsl") + "</span>"; }).join("");
+    document.getElementById("wgsl-name").textContent = name + ".wgsl";
+    paneKt.querySelectorAll(".ln").forEach(function (el) {
+      el.addEventListener("mouseenter", function () { hovering = true; mark(+el.dataset.i); });
+      el.addEventListener("mouseleave", function () { hovering = false; mark(-1); });
     });
-    hit.addEventListener("mouseleave", () => { tip.style.opacity = 0; });
-  });
-  host.appendChild(svg);
-}
-drawChart();
-let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawChart, 100); });
-
-// tabs: #report (default) and #goal, kept in the URL so links can open a tab
-function showTab() {
-  const name = location.hash === "#goal" ? "goal" : "report";
-  for (const t of ["report", "goal"]) {
-    document.getElementById("tab-" + t).hidden = t !== name;
-    document.getElementById("t-" + t).setAttribute("aria-selected", t === name);
+    autoLine = 0;
   }
-  if (name === "report") drawChart();
-}
-window.addEventListener("hashchange", () => { showTab(); window.scrollTo(0, 0); });
-showTab();
+  function mark(i) {
+    var any = i >= 0;
+    paneKt.querySelectorAll(".ln").forEach(function (el) { el.classList.toggle("on", +el.dataset.i === i); });
+    paneW.querySelectorAll(".ln").forEach(function (el) {
+      var hit = +el.dataset.k === i;
+      el.classList.toggle("on", any && hit);
+      el.classList.toggle("dim", any && !hit);
+    });
+  }
+  document.querySelectorAll(".tabs button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll(".tabs button").forEach(function (o) { o.setAttribute("aria-selected", String(o === b)); });
+      render(b.dataset.k);
+    });
+  });
+  render("saxpy");
+  if (!reduce) {
+    // A slow "compiler scan" that walks through the Kotlin lines when nobody is hovering.
+    auto = setInterval(function () {
+      if (hovering) return;
+      var n = KERNELS[current].kt.length;
+      mark(autoLine % n);
+      autoLine++;
+    }, 1400);
+  }
+
+  // ---------- 02: CPU vs GPU race (waves: CPU 10 cores 545.6 ms, GPU 4.63 ms) ----------
+  var CPU_MS = 545.6, GPU_MS = 4.63, ANIM = 4200; // CPU finishes in 4.2 s of animation; GPU in proportion.
+  var coresEl = document.getElementById("cores"), threadsEl = document.getElementById("threads");
+  for (var c = 0; c < 10; c++) coresEl.appendChild(document.createElement("div")).className = "core";
+  coresEl.querySelectorAll(".core").forEach(function (el) { el.appendChild(document.createElement("i")); });
+  var cellCount = 32 * 6;
+  for (var t = 0; t < cellCount; t++) threadsEl.appendChild(document.createElement("i"));
+  var cells = threadsEl.querySelectorAll("i"), bars = coresEl.querySelectorAll(".core i");
+  var cpuMs = document.getElementById("cpu-ms"), gpuMs = document.getElementById("gpu-ms");
+  var raf = null, running = false;
+
+  function race() {
+    cancelAnimationFrame(raf);
+    running = true;
+    cells.forEach(function (el) { el.className = ""; });
+    var start = performance.now();
+    var gpuAnim = Math.max(260, ANIM * GPU_MS / CPU_MS * 6); // stretched a little so the eye can see it
+    var jitter = Array.prototype.map.call(bars, function () { return 0.94 + Math.random() * 0.06; });
+    function frame(now) {
+      var e = now - start;
+      var gp = Math.min(1, e / gpuAnim);
+      var lit = Math.floor(gp * cellCount);
+      for (var i = 0; i < lit; i++) if (!cells[i].className) cells[i].className = "lit" + ((Math.floor(i / 64) % 2) ? " alt" : "");
+      gpuMs.textContent = (gp * GPU_MS).toFixed(2) + " ms";
+      var cp = Math.min(1, e / ANIM);
+      bars.forEach(function (b, j) { b.style.width = Math.min(100, (cp / jitter[j]) * 100) + "%"; });
+      cpuMs.textContent = (cp * CPU_MS).toFixed(1) + " ms";
+      if (cp < 1) raf = requestAnimationFrame(frame); else running = false;
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  document.getElementById("race-again").addEventListener("click", race);
+  if (reduce) {
+    bars.forEach(function (b) { b.style.width = "100%"; });
+    cells.forEach(function (el, i) { el.className = "lit" + ((Math.floor(i / 64) % 2) ? " alt" : ""); });
+    cpuMs.textContent = CPU_MS + " ms"; gpuMs.textContent = GPU_MS + " ms";
+  }
+
+  // ---------- 05: benchmark bars (log scale, speedup vs 10 cores, kernel time) ----------
+  var BENCH = [
+    { name: "waves", note: "heavy math", cpu: 545.625, gpu: 4.63 },
+    { name: "mandelbrot", note: "2048²", cpu: 101.039, gpu: 4.48 },
+    { name: "blur", note: "16.7M", cpu: 20.369, gpu: 1.985 },
+    { name: "saxpy", note: "16.7M", cpu: 8.726, gpu: 1.645 },
+    { name: "vectorAdd", note: "16.7M", cpu: 6.955, gpu: 1.82 },
+  ];
+  var MIN = 0.5, MAX = 200;
+  function pos(x) { return (Math.log10(x) - Math.log10(MIN)) / (Math.log10(MAX) - Math.log10(MIN)) * 100; }
+  var ticks = [1, 10, 100];
+  var barsEl = document.getElementById("bars");
+  barsEl.innerHTML = BENCH.map(function (b, i) {
+    var s = b.cpu / b.gpu;
+    var grid = ticks.map(function (t) { return '<span class="gridline' + (t === 1 ? " one" : "") + '" style="left:' + pos(t) + '%"></span>'; }).join("");
+    return '<div class="brow"><div class="name">' + b.name + "<small>" + b.note + '</small></div><div class="track">' + grid +
+      '<span class="b' + (i === 0 ? " top" : "") + '" data-w="' + pos(s) + '"></span></div><div class="x">' + (s >= 10 ? Math.round(s) : s.toFixed(1)) + "×</div></div>";
+  }).join("");
+  document.getElementById("ticks").innerHTML = ticks.map(function (t) { return '<span style="left:' + pos(t) + '%">' + t + "×</span>"; }).join("");
+
+  // ---------- entrance animations ----------
+  var io = "IntersectionObserver" in window ? new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (!en.isIntersecting) return;
+      en.target.classList.add("in");
+      if (en.target.id === "race" || en.target.querySelector && en.target.querySelector("#race")) { if (!reduce && !running) race(); }
+      en.target.querySelectorAll(".b[data-w]").forEach(function (b) { b.style.width = b.dataset.w + "%"; });
+      io.unobserve(en.target);
+    });
+  }, { threshold: 0.18 }) : null;
+  document.querySelectorAll(".reveal").forEach(function (el) {
+    if (io && !reduce) io.observe(el);
+    else { el.classList.add("in"); el.querySelectorAll(".b[data-w]").forEach(function (b) { b.style.width = b.dataset.w + "%"; }); }
+  });
+  if (reduce || !io) document.querySelectorAll(".b[data-w]").forEach(function (b) { b.style.width = b.dataset.w + "%"; });
+})();
 </script>
 </body>
 </html>

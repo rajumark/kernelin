@@ -1,0 +1,23 @@
+# Kernelin
+
+> Kernelin is a K2 compiler plugin for Kotlin 2.4.21. It translates plain Kotlin functions marked @Kernel into WGSL compute shaders that run on any GPU through WebGPU. The same functions still run on the CPU (KernelinCpu) for unit tests. Version 0.1.0 is on Maven Central (group io.github.rajumark, Gradle plugin id io.github.rajumark.kernelin).
+
+Key rules for writing a kernel: top-level function, returns Unit, parameters only FloatArray / IntArray / Int / Float, start with `val i = globalId()`, write results into an array at index i, Float literals with `f`, no Double / Long / String / lambdas / recursion / classes / nullable types, math only from kotlin.math (Float versions). Run it with `KernelinCpu.dispatch(size) { kernel(...) }` on the CPU, or `WebGpu.create().load(kernelSource(::kernel)).run(size, scalars, buffers)` on the GPU from Kotlin/Wasm.
+
+## Docs
+
+- [Full documentation (Markdown)](https://rajumark.github.io/kernelin/docs.md): install, writing kernels, supported Kotlin subset, CPU and GPU runners, API reference, compiler internals, generated WGSL layout, manifest format, troubleshooting
+- [For AI agents](https://rajumark.github.io/kernelin/docs.html#for-ai-agents): strict rules, kernel / test / GPU templates, AGENTS.md snippet, self-check
+- [Documentation (HTML)](https://rajumark.github.io/kernelin/docs.html)
+
+## Code
+
+- [Repository](https://github.com/rajumark/kernelin): source of the runtime, compiler plugin, WebGPU host and Gradle plugin
+- [Sample kernels](https://github.com/rajumark/kernelin/blob/main/samples/src/commonMain/kotlin/io/github/rajumark/kernelin/samples/Kernels.kt): vectorAdd, saxpy, mandelbrot, waves, blur
+- [Examples](https://github.com/rajumark/kernelin/tree/main/examples): hello-jvm and hello-multiplatform projects
+
+## Optional
+
+- [Changelog](https://github.com/rajumark/kernelin/blob/main/CHANGELOG.md)
+- [Live demo](https://rajumark.github.io/kernelin/demo/): a Mandelbrot computed on your GPU by Kernelin-generated code
+- [Benchmarks (JSON)](https://github.com/rajumark/kernelin/blob/main/benchmarks/2026-10-15-apple-m5.json)
