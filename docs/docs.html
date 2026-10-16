@@ -243,6 +243,8 @@
   "use strict";
   var H = window.KernelinSite;
   var content = document.getElementById("content");
+  // The page is built after load, so the browser can't restore or jump on its own; we do it ourselves.
+  if ("scrollRestoration" in history && location.hash) history.scrollRestoration = "manual";
   var tocEl = document.getElementById("toc");
   var markdown = "";
 

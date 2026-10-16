@@ -187,7 +187,7 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 | Math | `kotlin.math` Float versions: `sqrt sin cos tan asin acos atan atan2 sinh cosh tanh exp ln log2 log10 pow hypot floor ceil round truncate abs sign min max` |
 | Clamping | `coerceIn`, `coerceAtLeast`, `coerceAtMost` |
 | Constants | `PI.toFloat()`, `E.toFloat()`, `1.5.toFloat()`, `1.5.toInt()` (a Double constant converted right away) |
-| Float checks **(main)** | `isNaN()`, `isInfinite()`, `isFinite()`; `Float.toInt()` matches Kotlin exactly (NaN → 0, saturates at `Int.MAX_VALUE`) |
+| Float checks **(main)** | `isNaN()`, `isInfinite()`, `isFinite()`; `Float.toInt()` matches Kotlin exactly (NaN → 0, too large → `Int.MAX_VALUE`, too small → `Int.MIN_VALUE`) |
 | Helpers | Your own top-level functions and extension functions with `Int`/`Float`/`Boolean` parameters, returning `Int`, `Float`, `Boolean` or `Unit`. They become WGSL `fn`s. **(main)**: helpers can also take the kernel's `FloatArray`/`IntArray` parameters. |
 
 ### Not supported (compile error)
@@ -348,6 +348,22 @@ suspend fun runSaxpy(x: FloatArray, y: FloatArray): FloatArray {
 - **Create once, run many.** `WebGpu.create()` and `gpu.load(...)` are slow; `kernel.run(...)` is fast. Keep the `GpuKernel` and call `run` again; GPU buffers are reused when sizes match.
 - **Do enough work per element.** Copying data to the GPU and back costs time. Light kernels (one add per element) can be slower end-to-end than the CPU; heavy math wins big (see the benchmarks on the home page).
 - **Use `GpuData.ofJs(typedArray)`** to pass an existing JS `Float32Array` without a copy, and `result.js(name)` to get the output typed array without a copy.
+
+### Differences between CPU and GPU
+
+The same kernel gives the same results on the CPU and the GPU, with these known differences:
+
+| Case | On the CPU (Kotlin) | On the GPU (WGSL) |
+|---|---|---|
+| Float rounding in `sin`, `exp`, `pow`, … | IEEE 754 double-backed results | 32-bit, may differ in the last bits. Compare with a tolerance |
+| Float division by zero (`x / 0f`) | `Infinity` or `NaN` | **Not guaranteed.** WGSL leaves it undefined; some GPUs (for example llvmpipe, used in CI) return an ordinary number. Check the divisor yourself |
+| `Infinity` / `NaN` that arrive in a buffer | Normal Kotlin behaviour | **Same as Kotlin** (on main): `isNaN()`, `isInfinite()`, `isFinite()` and `toInt()` check the raw bits |
+| `Float.toInt()` on NaN or out-of-range values | NaN → 0, saturates at `Int.MIN_VALUE` / `Int.MAX_VALUE` | **Same as Kotlin** (on main). On 0.1.0 the result is GPU-specific |
+| Array index out of bounds | Throws `ArrayIndexOutOfBoundsException` | No error: the access is clamped silently. Test on the CPU to catch it |
+| Integer division by zero | Throws `ArithmeticException` | No error: returns a defined value |
+| Two threads writing the same element | `dispatch`: the highest id wins; `dispatchParallel`: a race | Undefined order. Give each thread its own element |
+
+Rule of thumb: don't rely on producing `Infinity` or `NaN` inside a kernel. Guard divisions (`if (d != 0f) x / d else 0f`).
 
 ### Other ways to use the shader
 
@@ -575,7 +591,7 @@ Tests check every generated shader with the [naga](https://github.com/gfx-rs/wgp
 cargo install naga-cli
 ```
 
-On main, GPU differential tests also run kernels as Kotlin on the CPU and as WGSL on a real GPU (WebGPU through Deno) and compare the results. Install Deno to run them locally; without it they are skipped. CI uses a software GPU (lavapipe) and fails if no GPU is found.
+On main, GPU differential tests also run kernels as Kotlin on the CPU and as WGSL on a real GPU (WebGPU through Deno) and compare the results. Install Deno to run them locally; without it they are skipped. CI runs them on a software GPU (llvmpipe through Vulkan, via Deno); they must pass, and CI fails if no GPU is found. 36 tests in total.
 
 ```bash
 brew install deno
@@ -599,7 +615,7 @@ gradle :samples:exportDemo                     # rebuild the live demo into docs
 
 **`Missing scalar parameter` / `Missing buffer parameter`** — `run` needs every parameter by its exact Kotlin name.
 
-**GPU and CPU results differ slightly** — GPUs use 32-bit floats with slightly different rounding for some math functions. Compare floats with a tolerance.
+**GPU and CPU results differ slightly** — GPUs use 32-bit floats with slightly different rounding for some math functions. Compare floats with a tolerance. See [Differences between CPU and GPU](#differences-between-cpu-and-gpu), especially division by zero.
 
 **Results are all zero** — Make sure the output array is written in the kernel (so it becomes `read_write`) and that `size` is not zero.
 
@@ -636,6 +652,7 @@ Follow every rule. If a rule can't be met, don't write a kernel; write normal Ko
 8. Helper functions must be top-level, take only `Int`/`Float`/`Boolean`, return `Int`/`Float`/`Boolean`/`Unit`, not recurse, have no default arguments, and must not take arrays.
 9. 2D data is a flat array: `x = i % width`, `y = i / width`.
 10. Guard neighbour reads: `if (j >= 0 && j < a.size)`. The bounds check against `size` is automatic only for `globalId()` itself.
+11. Never divide by a value that can be zero without a check: `x / 0f` is undefined on the GPU (it is not guaranteed to be `Infinity` or `NaN`).
 
 ### Template
 
