@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/rajumark/kernelin/actions/workflows/ci.yml/badge.svg)](https://github.com/rajumark/kernelin/actions/workflows/ci.yml)
 [![Live demo](https://img.shields.io/badge/live%20demo-try%20it-2a78d6)](https://rajumark.github.io/kernelin/demo/)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.rajumark/kernelin-runtime)](https://central.sonatype.com/artifact/io.github.rajumark/kernelin-runtime)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 Write GPU kernels in plain Kotlin. A K2 compiler plugin translates `@Kernel` functions to WGSL,
@@ -27,7 +28,7 @@ becomes
 
 ## Status
 
-MVP in progress. On an Apple M5, the generated shaders match the Kotlin CPU results and run
+**0.1.0 is released on Maven Central.** On an Apple M5, the generated shaders match the Kotlin CPU results and run
 up to 118× faster than all 10 CPU cores (see the [project report](https://rajumark.github.io/kernelin/) and `benchmarks/`).
 
 **[Live demo →](https://rajumark.github.io/kernelin/demo/)** a fractal computed on your GPU by Kernelin-generated code.
