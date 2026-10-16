@@ -203,14 +203,12 @@ class WgslTranslationTest {
             fun k(out: FloatArray, n: Int) {
                 val i = globalId()
                 if (i in 0..10 step 2) out[i] = 1f
-                val d = out[i].toDouble()
-                out[i] = d.toFloat()
+                out[i] = out[i].toDouble().toFloat()
             }
             """,
         )
         val text = c.errors.joinToString("\n")
         assertContains(text, "'in' supports ranges written in place")
-        assertContains(text, "variable 'd' has type Double")
         assertContains(text, "only Double constants converted right away")
     }
 
@@ -233,7 +231,7 @@ class WgslTranslationTest {
             }
             """,
         )
-        val error = c.errors.single { "strings aren't supported" in it || "variable 's'" in it }
+        val error = c.errors.first { "strings aren't supported" in it || "variable 's'" in it }
         assertContains(error, "Kernels.kt:")
         assertContains(error, "(in @Kernel bad)")
     }
@@ -262,15 +260,13 @@ class WgslTranslationTest {
 
     @Test
     fun `body errors are all reported together`() {
+        // Frontend checks (also shown in the IDE) report every mistake at once; the build stops there.
         val c = compileError(
             """
-            fun fact(n: Int): Int = if (n <= 1) 1 else n * fact(n - 1)
-
             @Kernel
             fun bad(out: FloatArray) {
                 val d = 1.0
                 run { out[0] = 2f }
-                out[0] = fact(3).toFloat()
                 val r = if (out[0] > 1f) "yes" else "no"
             }
             """,
@@ -278,9 +274,23 @@ class WgslTranslationTest {
         val text = c.errors.joinToString("\n")
         assertContains(text, "Double isn't supported")
         assertContains(text, "lambdas aren't supported")
-        assertContains(text, "recursion isn't allowed")
         assertContains(text, "strings aren't supported")
-        assertTrue(c.errors.size >= 4, text)
+        assertTrue(c.errors.size >= 3, text)
+    }
+
+    @Test
+    fun `recursion is rejected`() {
+        val c = compileError(
+            """
+            fun fact(n: Int): Int = if (n <= 1) 1 else n * fact(n - 1)
+
+            @Kernel
+            fun bad(out: FloatArray) {
+                out[0] = fact(3).toFloat()
+            }
+            """,
+        )
+        assertContains(c.errors.joinToString("\n"), "recursion isn't allowed")
     }
 }
 

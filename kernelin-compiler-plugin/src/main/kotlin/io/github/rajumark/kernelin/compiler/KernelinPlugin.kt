@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.config.CompilerConfigurationKey
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.config.MessageCollectorAccess
 import org.jetbrains.kotlin.config.messageCollector
+import org.jetbrains.kotlin.fir.extensions.FirExtensionRegistrarAdapter
 import java.io.File
 
 const val KERNELIN_PLUGIN_ID = "io.github.rajumark.kernelin"
@@ -51,6 +52,8 @@ class KernelinCompilerPluginRegistrar : CompilerPluginRegistrar() {
         val outputDir = (configuration.get(KernelinConfigurationKeys.OUTPUT_DIR)?.let(::File)
             ?: configuration.get(JVMConfigurationKeys.OUTPUT_DIRECTORY))
             ?.resolve("kernelin")
+        // Frontend checks: unsupported code is underlined in the IDE while you type (see KernelinFirCheckers.kt).
+        FirExtensionRegistrarAdapter.registerExtension(KernelinFirExtensionRegistrar())
         IrGenerationExtension.registerExtension(KernelinIrGenerationExtension(messages, outputDir))
     }
 }
