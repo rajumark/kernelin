@@ -52,19 +52,23 @@ class GpuDifferentialTest {
     ).let { }
 
     @Test
-    fun `NaN and infinity checks`() = GpuDifferential.assertSame(
-        """
-        @Kernel
-        fun k(a: FloatArray, b: FloatArray, out: IntArray) {
-            val i = globalId()
-            val nan = (a[i] - a[i]) / (b[i] - b[i])
-            val inf = a[i] / (b[i] - b[i])
-            val v = if (i % 3 == 0) nan else if (i % 3 == 1) inf else a[i]
-            out[i] = (if (v.isNaN()) 1 else 0) + (if (v.isInfinite()) 2 else 0) + (if (v.isFinite()) 4 else 0) + v.toInt() * 8
-        }
-        """,
-        "k", 999, mapOf("a" to floats(999, 12), "b" to floats(999, 13), "out" to IntArray(999)),
-    ).let { }
+    fun `NaN and infinity checks`() {
+        // Special values come in through the data. (Making them on the GPU with x / 0f isn't portable:
+        // WGSL leaves float division by zero undefined, and some GPUs return an ordinary number.)
+        val special = floatArrayOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY, -0f, 1e38f, -1e38f)
+        val a = floats(999, 12).also { v -> for (i in v.indices) if (i % 2 == 0) v[i] = special[(i / 2) % special.size] }
+        GpuDifferential.assertSame(
+            """
+            @Kernel
+            fun k(a: FloatArray, out: IntArray) {
+                val i = globalId()
+                val v = a[i]
+                out[i] = (if (v.isNaN()) 1 else 0) + (if (v.isInfinite()) 2 else 0) + (if (v.isFinite()) 4 else 0) + v.toInt() * 8
+            }
+            """,
+            "k", 999, mapOf("a" to a, "out" to IntArray(999)),
+        )
+    }
 
     @Test
     fun `comparisons, logic and if or when as values`() = GpuDifferential.assertSame(
