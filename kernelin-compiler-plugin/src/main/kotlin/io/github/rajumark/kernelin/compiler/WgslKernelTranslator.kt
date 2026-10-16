@@ -155,7 +155,8 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 appendLine("}")
             }
             if (usesFloatToInt) {
-                // Kotlin's Float.toInt(): NaN -> 0, too large -> Int.MAX_VALUE. Plain i32() clamps to 2^31 - 128.
+                // Kotlin's Float.toInt(): NaN -> 0, out of range -> Int.MIN_VALUE / MAX_VALUE. Plain i32() clamps the
+                // top to 2^31 - 128, and Vulkan drivers leave out-of-range conversions undefined, so handle both ends.
                 appendLine()
                 appendLine("fn kernelin_f2i(x: f32) -> i32 {")
                 appendLine("  if (kernelin_is_nan(x)) {")
@@ -163,6 +164,9 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 appendLine("  }")
                 appendLine("  if (x >= 2147483648.0f) {")
                 appendLine("    return 2147483647i;")
+                appendLine("  }")
+                appendLine("  if (x <= -2147483648.0f) {")
+                appendLine("    return i32(-2147483647) - 1i;")
                 appendLine("  }")
                 appendLine("  return i32(x);")
                 appendLine("}")

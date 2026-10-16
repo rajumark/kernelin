@@ -22,6 +22,11 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // Show the full CPU vs GPU difference in CI logs, not just "FAILED".
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
     // Tests run the real Kotlin compiler with the packaged plugin jar, like a user's build would.
     val pluginJar = tasks.jar.flatMap { it.archiveFile }
     inputs.file(pluginJar)
