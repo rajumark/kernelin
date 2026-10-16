@@ -256,6 +256,7 @@
     <ul>
       <li><a href="#how">How it works</a></li>
       <li><a href="#benchmarks">Benchmarks</a></li>
+      <li><a href="#projects">Projects</a></li>
       <li><a href="#docs">Docs</a></li>
       <li><a href="demo/">Live demo</a></li>
       <li><a href="https://github.com/rajumark/kernelin">GitHub</a></li>
@@ -521,12 +522,34 @@
     </section>
   </div>
 
-  <!-- ======== 06 DOCS ======== -->
+  <!-- ======== 06 PROJECTS ======== -->
+  <div class="wrap">
+    <section class="docs" id="projects">
+      <div class="sec-head reveal">
+        <div>
+          <span class="num">06 / REAL-WORLD PROJECTS</span>
+          <h2>Not a demo.<br>Workloads people pay for.</h2>
+        </div>
+        <p>Three open-source apps built with Kernelin 0.1.0 from Maven Central. Each runs the same Kotlin on the GPU and the CPU, checks its answers against exact formulas or ground truth, and shows measured speed.</p>
+      </div>
+      <div class="doc-grid reveal">
+        <a class="doc-card" href="https://rajumark.github.io/kernelin-projects/risk-engine/"><span class="n">SIMULATION</span><h3>Risk Engine</h3><p>Monte Carlo pricing and greeks of an options book (Asian, barrier, lookback): 1M paths × 252 days × 4 scenarios in 46 ms, 53× faster than 10 JVM cores. Checked against Black–Scholes on every run.</p><span class="go">Open app →</span></a>
+        <a class="doc-card" href="https://rajumark.github.io/kernelin-projects/photo-studio/"><span class="n">IMAGE</span><h3>Photo Studio</h3><p>Live photo editing with edge-preserving denoise: 3.8 MP × 169 taps in 48 ms, +11.3 dB PSNR on a test chart with real sensor noise, 119× faster than in-browser CPU.</p><span class="go">Open app →</span></a>
+        <a class="doc-card" href="https://github.com/rajumark/kernelin-projects/tree/main/motion-guard"><span class="n">VIDEO</span><h3>Motion Guard</h3><p>Traffic camera analytics: block-matching motion vectors (576 M comparisons per 720p frame), vehicle speed per lane within 6%, precision 0.995 vs ground truth.</p><span class="go">See the code →</span></a>
+      </div>
+      <div class="docs-cta reveal">
+        <span>Source, tests and benchmarks for all three</span>
+        <a class="btn dark" href="https://rajumark.github.io/kernelin-projects/">All projects <span class="arr">→</span></a>
+      </div>
+    </section>
+  </div>
+
+  <!-- ======== 07 DOCS ======== -->
   <div class="wrap">
     <section class="docs" id="docs">
       <div class="sec-head reveal">
         <div>
-          <span class="num">06 / DOCUMENTATION</span>
+          <span class="num">07 / DOCUMENTATION</span>
           <h2>Everything you need,<br>for humans and for agents.</h2>
         </div>
         <p>From your first kernel to the binding layout of the generated shader. The whole guide is also published as one Markdown file, so an AI coding agent can read it and write correct kernels on the first try.</p>
@@ -567,7 +590,7 @@
               <div><span class="dot" id="gpu-dot"></span><span id="gpu-state">Checking WebGPU…</span></div>
             </div>
           </div>
-          <div><h4>Product</h4><ul><li><a href="#how">How it works</a></li><li><a href="#benchmarks">Benchmarks</a></li><li><a href="demo/">Live demo</a></li></ul></div>
+          <div><h4>Product</h4><ul><li><a href="#how">How it works</a></li><li><a href="#benchmarks">Benchmarks</a></li><li><a href="demo/">Live demo</a></li><li><a href="https://rajumark.github.io/kernelin-projects/">Projects</a></li></ul></div>
           <div><h4>Docs</h4><ul><li><a href="docs.html#quick-start">Quick start</a></li><li><a href="docs.html#api-reference">API reference</a></li><li><a href="docs.html#for-ai-agents">For AI agents</a></li><li><a href="llms.txt">llms.txt</a></li></ul></div>
           <div><h4>Project</h4><ul><li><a href="https://github.com/rajumark/kernelin">GitHub</a></li><li><a href="https://central.sonatype.com/artifact/io.github.rajumark/kernelin-runtime">Maven Central</a></li><li><a href="https://github.com/rajumark/kernelin/blob/main/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/rajumark/kernelin/blob/main/LICENSE">License</a></li></ul></div>
           <div class="cta"><a class="btn dark" href="docs.html#quick-start">Get started</a></div>

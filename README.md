@@ -37,6 +37,15 @@ up to 118× faster than all 10 CPU cores (see the [website](https://rajumark.git
 **[Documentation →](https://rajumark.github.io/kernelin/docs.html)** guides, API reference and compiler internals. AI agents can read
 [`docs.md`](https://rajumark.github.io/kernelin/docs.md) or [`llms.txt`](https://rajumark.github.io/kernelin/llms.txt); see also [`AGENTS.md`](AGENTS.md).
 
+## Real-world projects
+
+[kernelin-projects](https://github.com/rajumark/kernelin-projects) ([live](https://rajumark.github.io/kernelin-projects/)):
+three apps built with Kernelin from Maven Central, each checked against exact answers and benchmarked.
+
+- **Risk Engine** (simulation): Monte Carlo options pricing + greeks, 1M paths × 252 days × 4 scenarios in 46 ms on an Apple M5 GPU, 53× faster than 10 JVM cores.
+- **Photo Studio** (image): live photo editing with edge-preserving denoise, 3.8 MP in 48 ms, +11.3 dB PSNR.
+- **Motion Guard** (video): traffic camera motion vectors and vehicle speeds, precision 0.995 vs ground truth.
+
 ## Use it in your project
 
 Kernelin is on Maven Central. Make sure `mavenCentral()` is in your plugin repositories:
