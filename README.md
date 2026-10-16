@@ -44,7 +44,7 @@ three apps built with Kernelin from Maven Central, each checked against exact an
 
 - **Risk Engine** (simulation): Monte Carlo options pricing + greeks, 1M paths × 252 days × 4 scenarios in 46 ms on an Apple M5 GPU, 53× faster than 10 JVM cores.
 - **Photo Studio** (image): live photo editing with edge-preserving denoise, 3.8 MP in 48 ms, +11.3 dB PSNR.
-- **Motion Guard** (video): traffic camera motion vectors and vehicle speeds, precision 0.995 vs ground truth.
+- **Motion Guard** (video): traffic camera motion vectors and vehicle speeds, 720p in 19 ms (live 30 fps), precision 0.995 vs ground truth.
 
 ## Use it in your project
 
