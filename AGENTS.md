@@ -20,12 +20,16 @@ Kernelin is a K2 compiler plugin that turns plain Kotlin `@Kernel` functions int
 
 - JDK 21 and Kotlin 2.4.21. Use the installed `gradle` (`gradle build`).
 - Compiler tests validate every generated shader with `naga` when it is on the PATH (`cargo install naga-cli`).
-- CI (`.github/workflows/ci.yml`) builds, tests and runs both examples.
+- GPU tests need Deno (`brew install deno`); without it they are skipped locally. CI runs them on llvmpipe.
+- CI (`.github/workflows/ci.yml`) builds, tests, fuzzes and runs both examples.
 
 ## Rules
 
-- A new supported Kotlin construct needs: translation in `WgslKernelTranslator`, a test in `WgslTranslationTest`
-  (WGSL text + naga), a CPU test if behaviour matters, and an update to the supported table in `docs/docs.md`.
+- Follow [CONTRIBUTING.md](CONTRIBUTING.md). A new supported Kotlin construct needs: translation in
+  `WgslKernelTranslator`, a WGSL test (text + naga), a GPU-vs-CPU test, a fuzzer case, and a row in the
+  supported table in `docs/docs.md`. Add it to the "Unreleased" section of `CHANGELOG.md`.
+- Public API changes follow [VERSIONING.md](VERSIONING.md); `checkKotlinAbi` fails the build on an accidental
+  change (update the `api/` dumps only on purpose). Coverage must stay at 80% or more.
 - Unsupported code must produce a clear compile error with a fix hint, never wrong WGSL.
 - `docs/docs.md` is the single source of the documentation; `docs/docs.html` renders it. Keep `docs/llms.txt` in sync.
 - Don't use "Kotlin" in artifact or package names (trademark); packages are `io.github.rajumark.kernelin`.

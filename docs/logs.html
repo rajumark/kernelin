@@ -170,7 +170,7 @@
     <dt>Status</dt><dd><span class="tag good">v0.1.0 released on Maven Central</span> <span class="tag good">MVP done</span> <span class="tag blue">Kotlin → GPU verified on real hardware</span></dd>
     <dt>Phase</dt><dd>Step 0 ✓ · MVP ✓ · <b>0.1.0 published</b> · v1.0 next</dd>
     <dt>Last updated</dt><dd>2026-10-16</dd>
-    <dt>Tests</dt><dd><span class="tag good">36 / 36 passing</span> · every generated shader validated by naga · 13 kernels proven equal to Kotlin on a real GPU</dd>
+    <dt>Tests</dt><dd><span class="tag good">39 / 39 passing</span> · every generated shader validated by naga · 13 kernels proven equal to Kotlin on a real GPU · fuzzer (2,000+ random kernels) · coverage 86% (gate 80%)</dd>
     <dt>Stack</dt><dd>Kotlin 2.4.21 (K2) · Kotlin Multiplatform (JVM + Wasm) · JDK 21 · Gradle 9.6 · WebGPU</dd>
     <dt>Tested on</dt><dd>Apple M5 (10 CPU cores, 8-core GPU, Metal) · WebGPU in Chromium 152</dd>
     <dt>Live demo</dt><dd><a href="demo/"><b>Try it in your browser →</b></a> zoom a fractal computed on your GPU from plain Kotlin</dd>
@@ -472,6 +472,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
     <div class="row"><span>Oct 16</span><span><b>v0.1.0 released on Maven Central.</b> Coordinates <code>io.github.rajumark:kernelin-runtime</code>, <code>kernelin-webgpu</code>, <code>kernelin-compiler-plugin</code>, <code>kernelin-gradle-plugin</code>, plugin id <code>io.github.rajumark.kernelin</code> (packages renamed to match). Before upload: 21 tests, CI green, 38/38 signatures valid, all POMs complete, a stale-class bug caught and fixed. After release: fresh projects using only Maven Central passed on the JVM, in Wasm and on the M5 GPU.</span></div>
     <div class="row"><span>Oct 16</span><span><b>More Kotlin in kernels (on main, not released).</b> <code>in</code> ranges, <code>repeat(n) { }</code>, labeled <code>break</code>/<code>continue</code>, Boolean params, arrays in helpers, <code>PI.toFloat()</code>, <code>isNaN()</code>. Fixes: Unit helper calls were dropped, <code>Float.toInt()</code> now matches Kotlin on GPU, JVM never keeps a stale embedded shader. New GPU differential tests: 13 kernels run as Kotlin and as WGSL on a real GPU (Deno WebGPU; lavapipe in CI). 36 tests.</span></div>
     <div class="row"><span>Oct 16</span><span><b>GPU tests required in CI.</b> GPU differential tests run on llvmpipe (Vulkan via Deno) and must pass. NaN and infinity fed through buffers behave exactly like Kotlin; <code>Float.toInt()</code> handles both ends (NaN → 0, too large → Int.MAX_VALUE, too small → Int.MIN_VALUE). Known limit: <code>x / 0f</code> is undefined in WGSL (llvmpipe returns an ordinary number), so kernels must not rely on it producing Infinity/NaN. Documented in docs.md.</span></div>
+    <div class="row"><span>Oct 16</span><span><b>Trust foundations (on main).</b> Fuzzer: random valid Int kernels must match CPU vs GPU exactly (40 per build, 300 fresh per CI run, 2,000 passed locally); it found that WGSL rejects all-constant overflow like <code>-75 shl 28</code>, so constants are now computed with Kotlin rules at build time. Shift counts masked to 5 bits like Kotlin; constant <code>5 / 0</code> is a compile error; Infinity/NaN constants allowed. Explicit API mode + KDoc, ABI validation (<code>api/</code> dumps, JVM runtime binary-compatible with 0.1.0), Kover coverage 86% with an 80% gate. CONTRIBUTING, VERSIONING, SECURITY, issue/PR templates. 39 tests.</span></div>
     <div class="row"><span>Oct 16</span><span><b>Website + docs.</b> New landing page at the site root, full documentation (<code>docs.html</code>, also as <code>docs.md</code> and <code>llms.txt</code> for AI agents), <code>AGENTS.md</code>. This report moved to <code>logs.html</code> behind a PIN.</span></div>
   </div>
 
@@ -504,7 +505,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
       <tr><td>GPU vendors tested in CI</td><td class="num">1 (Apple)</td><td class="num">4</td><td class="num">6</td></tr>
       <tr><td>Kotlin versions supported</td><td class="num">1 (2.4.21)</td><td class="num">latest 3</td><td class="num">latest 3, new ones in ≤ 2 weeks</td></tr>
       <tr><td>Speed vs hand-written WGSL</td><td class="num">not measured</td><td class="num">≥ 70%</td><td class="num">≥ 80–90%</td></tr>
-      <tr><td>Known CPU/GPU mismatches (beyond float tolerance)</td><td class="num">0 known, not fuzzed</td><td class="num">0, fuzzed</td><td class="num">0, fuzzed daily</td></tr>
+      <tr><td>Known CPU/GPU mismatches (beyond float tolerance)</td><td class="num">0 known, fuzzed (40/build, 300/CI run)</td><td class="num">0, fuzzed</td><td class="num">0, fuzzed daily</td></tr>
       <tr><td>Projects using it outside this repo</td><td class="num">0</td><td class="num">3+</td><td class="num">25+ incl. production apps</td></tr>
       <tr><td>Maintainers</td><td class="num">1</td><td class="num">2+</td><td class="num">3+ from different companies</td></tr>
     </tbody>
@@ -560,10 +561,10 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
       <tr><td class="area">GPU features</td><td>2D/3D thread ids, choosing workgroup size (fixed at 64), shared (workgroup) memory, barriers, atomics, subgroup operations, textures/images, random numbers, reductions (sum, max), prefix scan, sort</td><td><span class="tag blue">v1–v3</span></td></tr>
       <tr><td class="area">Runtime</td><td>GPU from the JVM (desktop/server), Android native, iOS, Kotlin/Native; buffers that stay on the GPU between runs; chaining kernels without copying back; typed API (<code>saxpy.gpu(a, x, y)</code>); automatic CPU fallback when there is no GPU; GPU timing; "device lost" recovery</td><td><span class="tag blue">v1–v2</span></td></tr>
       <tr><td class="area">Backends</td><td>only WGSL. No direct SPIR-V (Vulkan), MSL (Metal) or CUDA</td><td><span class="tag gray">v3</span></td></tr>
-      <tr><td class="area">Safety</td><td>no bounds checks on the GPU (out-of-range reads are clamped silently), divide-by-zero differs from Kotlin, no fuzzing of CPU vs GPU results, only tested on one GPU vendor</td><td><span class="tag blue">v2</span></td></tr>
+      <tr><td class="area">Safety</td><td>no bounds checks on the GPU (out-of-range reads are clamped silently), runtime divide-by-zero differs from Kotlin (constant <code>5 / 0</code> is a compile error on main), only tested on one GPU vendor plus a software GPU in CI; CPU vs GPU fuzzing done on main</td><td><span class="tag blue">v2</span></td></tr>
       <tr><td class="area">IDE &amp; tooling</td><td>errors only on build (no red underlines while typing), no IntelliJ plugin ("show generated WGSL", gutter icons), no kernel debugger, no profiler, stale <code>.wgsl</code> files after deleting a kernel, Gradle configuration cache not verified</td><td><span class="tag blue">v1–v2</span></td></tr>
-      <tr><td class="area">Compatibility</td><td>works with exactly one Kotlin version (2.4.21); no Kotlin version matrix in CI; no public API compatibility check</td><td><span class="tag blue">v2</span></td></tr>
-      <tr><td class="area">Distribution</td><td>0.1.0 prepared but <b>not yet on Maven Central</b> or the Gradle Plugin Portal; no API docs (Dokka), no docs site</td><td><span class="tag warn">v1</span></td></tr>
+      <tr><td class="area">Compatibility</td><td>works with exactly one Kotlin version (2.4.21); no Kotlin version matrix in CI. Public API check (<code>checkKotlinAbi</code>) and VERSIONING.md done on main</td><td><span class="tag blue">v2</span></td></tr>
+      <tr><td class="area">Distribution</td><td>0.1.0 prepared but <b>not yet on Maven Central</b> or the Gradle Plugin Portal; no API docs (Dokka); docs site now live (docs.html)</td><td><span class="tag warn">v1</span></td></tr>
       <tr><td class="area">Community</td><td>no CONTRIBUTING, Code of Conduct, SECURITY policy, issue templates or design docs; one maintainer</td><td><span class="tag blue">v1–v2</span></td></tr>
     </tbody>
   </table>
@@ -586,8 +587,8 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
   <details>
     <summary>Compatibility &amp; stability</summary>
     <div class="inner"><ul class="check">
-      <li><span class="box"></span><span class="t">Semantic versioning, a clear deprecation cycle, and a stable 1.x API</span></li>
-      <li><span class="box"></span><span class="t">Public API checked on every PR (Kotlin ABI validation / binary-compatibility-validator)</span></li>
+      <li class="doing"><span class="box"></span><span class="t">Semantic versioning, a clear deprecation cycle, and a stable 1.x API (policy written in VERSIONING.md)</span></li>
+      <li class="done"><span class="box">✓</span><span class="t">Public API checked on every PR (Kotlin ABI validation / binary-compatibility-validator)</span></li>
       <li><span class="box"></span><span class="t">CI matrix over the latest 3 Kotlin versions plus Kotlin dev builds; support new Kotlin releases within 2 weeks</span></li>
       <li><span class="box"></span><span class="t">Works with Gradle configuration cache, build cache and incremental compilation</span></li>
       <li><span class="box"></span><span class="t">Long-term support line for companies that can't upgrade every month</span></li>

@@ -18,6 +18,8 @@ Key rules for writing a kernel: top-level function, returns Unit, parameters onl
 
 ## Optional
 
-- [Changelog](https://github.com/rajumark/kernelin/blob/main/CHANGELOG.md)
+- [Changelog](https://github.com/rajumark/kernelin/blob/main/CHANGELOG.md): released versions plus an "Unreleased" section for main
+- [CONTRIBUTING.md](https://github.com/rajumark/kernelin/blob/main/CONTRIBUTING.md): rules for changing the compiler
+- [VERSIONING.md](https://github.com/rajumark/kernelin/blob/main/VERSIONING.md): compatibility policy and what counts as public API
 - [Live demo](https://rajumark.github.io/kernelin/demo/): a Mandelbrot computed on your GPU by Kernelin-generated code
 - [Benchmarks (JSON)](https://github.com/rajumark/kernelin/blob/main/benchmarks/2026-10-15-apple-m5.json)

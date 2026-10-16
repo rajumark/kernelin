@@ -177,7 +177,7 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 |---|---|
 | Types | `Int`, `Float`, `Boolean` for locals; `FloatArray`, `IntArray`, `Int`, `Float` for kernel parameters; `Boolean` parameters **(main)** |
 | Variables | `val`, `var`, with or without a type |
-| Operators | `+ - * / %`, unary `-`, `++ --`, `+= -= *= /= %=`, comparisons, `&& \|\| !`, `and or xor inv shl shr ushr` |
+| Operators | `+ - * / %`, unary `-`, `++ --`, `+= -= *= /= %=`, comparisons, `&& \|\| !`, `and or xor inv shl shr ushr` (on main, shift counts use their low 5 bits, exactly like Kotlin, on every GPU) |
 | Conversions | `toFloat()`, `toInt()`; mixed `Int`/`Float` math is promoted like Kotlin |
 | Conditions | `if`/`else`, `when` (with or without a subject), both as statements and as values |
 | Loops | `for` over Int ranges: `a until b`, `a..b`, `a..<b`, `a downTo b`, `step n`, `array.indices`; `while`, `do-while`, `break`, `continue` |
@@ -187,6 +187,7 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 | Math | `kotlin.math` Float versions: `sqrt sin cos tan asin acos atan atan2 sinh cosh tanh exp ln log2 log10 pow hypot floor ceil round truncate abs sign min max` |
 | Clamping | `coerceIn`, `coerceAtLeast`, `coerceAtMost` |
 | Constants | `PI.toFloat()`, `E.toFloat()`, `1.5.toFloat()`, `1.5.toInt()` (a Double constant converted right away) |
+| Constant math **(main)** | All-constant expressions are computed at build time with Kotlin's rules (wrapping, Infinity/NaN), e.g. `-75 shl 28`; `Float.POSITIVE_INFINITY`, `NEGATIVE_INFINITY` and `NaN` constants are allowed |
 | Float checks **(main)** | `isNaN()`, `isInfinite()`, `isFinite()`; `Float.toInt()` matches Kotlin exactly (NaN → 0, too large → `Int.MAX_VALUE`, too small → `Int.MIN_VALUE`) |
 | Helpers | Your own top-level functions and extension functions with `Int`/`Float`/`Boolean` parameters, returning `Int`, `Float`, `Boolean` or `Unit`. They become WGSL `fn`s. **(main)**: helpers can also take the kernel's `FloatArray`/`IntArray` parameters. |
 
@@ -337,7 +338,7 @@ suspend fun runSaxpy(x: FloatArray, y: FloatArray): FloatArray {
 ### Rules for `run`
 
 - `size` is the number of threads (usually the length of the output array).
-- `scalars` must contain **every** `Int` and `Float` parameter by its Kotlin name (on main also `Boolean`; the type becomes `Map<String, Any>`).
+- `scalars` must contain **every** `Int` and `Float` parameter by its Kotlin name (on main also `Boolean`; the type becomes `Map<String, Any>`, source compatible, but Wasm libraries built against 0.1.0 that call `run()` need a recompile).
 - `buffers` must contain **every** array parameter by its Kotlin name.
 - Use `GpuData.empty(n)` for pure outputs, so nothing is uploaded.
 - Only arrays the kernel writes (`read_write`) are copied back. Read them with `result.floats(name)` or `result.ints(name)`.
@@ -360,7 +361,7 @@ The same kernel gives the same results on the CPU and the GPU, with these known 
 | `Infinity` / `NaN` that arrive in a buffer | Normal Kotlin behaviour | **Same as Kotlin** (on main): `isNaN()`, `isInfinite()`, `isFinite()` and `toInt()` check the raw bits |
 | `Float.toInt()` on NaN or out-of-range values | NaN → 0, saturates at `Int.MIN_VALUE` / `Int.MAX_VALUE` | **Same as Kotlin** (on main). On 0.1.0 the result is GPU-specific |
 | Array index out of bounds | Throws `ArrayIndexOutOfBoundsException` | No error: the access is clamped silently. Test on the CPU to catch it |
-| Integer division by zero | Throws `ArithmeticException` | No error: returns a defined value |
+| Integer division by zero | Throws `ArithmeticException` | No error: returns a defined value. On main, a **constant** division like `5 / 0` is a compile error |
 | Two threads writing the same element | `dispatch`: the highest id wins; `dispatchParallel`: a race | Undefined order. Give each thread its own element |
 
 Rule of thumb: don't rely on producing `Infinity` or `NaN` inside a kernel. Guard divisions (`if (d != 0f) x / d else 0f`).
@@ -392,6 +393,7 @@ Common messages and fixes:
 | `'kotlin.collections.sum' can't run on the GPU` | Write the loop yourself |
 | `for loops must iterate over an Int range (until, .., ..<, downTo, step, indices)` | Use an Int range |
 | `an if/when used as a value needs an else branch` | Add `else` |
+| `integer division by zero (Kotlin would throw ArithmeticException here)` **(main)** | Fix the constant divisor |
 | `kernelSource() was not replaced: apply the Kernelin compiler plugin` (at runtime) | Apply the Gradle plugin to that module |
 
 When a kernel translates, the build log shows `Kernelin: translated @Kernel com.example.saxpy to WGSL (N lines)`.
@@ -591,12 +593,22 @@ Tests check every generated shader with the [naga](https://github.com/gfx-rs/wgp
 cargo install naga-cli
 ```
 
-On main, GPU differential tests also run kernels as Kotlin on the CPU and as WGSL on a real GPU (WebGPU through Deno) and compare the results. Install Deno to run them locally; without it they are skipped. CI runs them on a software GPU (llvmpipe through Vulkan, via Deno); they must pass, and CI fails if no GPU is found. 36 tests in total.
+On main, GPU differential tests also run kernels as Kotlin on the CPU and as WGSL on a real GPU (WebGPU through Deno) and compare the results. Install Deno to run them locally; without it they are skipped. CI runs them on a software GPU (llvmpipe through Vulkan, via Deno); they must pass, and CI fails if no GPU is found.
 
 ```bash
 brew install deno
 scripts/check-incremental.sh                   # checks incremental builds never keep a stale shader
 ```
+
+Quality checks on main, all part of `gradle build`:
+
+| Check | What it does |
+|---|---|
+| Fuzzer (`KernelFuzzTest`) | Random valid Int kernels must give identical results on CPU and GPU. 40 per build, 300 fresh ones on every CI run; run more with `-Pkernelin.fuzz.count=1000` (`-Pkernelin.fuzz.seed=N` to repeat a run) |
+| ABI validation | The public API of every module is recorded in `api/` and checked by `checkKotlinAbi`; explicit API mode and KDoc on all public API |
+| Coverage | Kover, currently 86%; the build fails below 80%. Report: `gradle koverHtmlReport` |
+
+39 tests in total: 28 compiler tests (including 13 GPU tests and the fuzzer), 6 runtime, 5 samples.
 
 Other tasks:
 
@@ -604,6 +616,13 @@ Other tasks:
 gradle :samples:bench -Pout=/path/to/folder   # benchmark; then serve the folder and open runner.html
 gradle :samples:exportDemo                     # rebuild the live demo into docs/demo
 ```
+
+## Contributing and versioning
+
+- [CONTRIBUTING.md](https://github.com/rajumark/kernelin/blob/main/CONTRIBUTING.md): how to set up, and the rule for adding a new Kotlin construct: translator change, WGSL test, GPU-vs-CPU test, fuzzer case and a row in the tables on this page.
+- [VERSIONING.md](https://github.com/rajumark/kernelin/blob/main/VERSIONING.md): semantic versioning. Before 1.0, minor releases may change the public API (always listed in the changelog); patch releases never do. Each release supports exactly one Kotlin version. Public API = the runtime and WebGPU classes, the Gradle plugin id and the supported Kotlin subset; the exact WGSL text is not.
+- [SECURITY.md](https://github.com/rajumark/kernelin/blob/main/SECURITY.md): how to report a vulnerability privately.
+- Issue and pull request templates are in `.github/`.
 
 ## Troubleshooting
 
@@ -726,7 +745,7 @@ Test every kernel on the CPU with KernelinCpu.dispatch(size) { kernel(...) }.
 - IDE errors while you type: FIR checkers, so unsupported code is underlined in IntelliJ IDEA and Android Studio, not only on build
 - Vector types and 2D ids
 - Android: the live demo in Chrome first, then AndroidX WebGPU natively
-- Done on main: `Boolean` parameters, arrays in helpers, `repeat`, labeled `break`/`continue`, `in` ranges, `isNaN`; GPU-vs-CPU differential tests on a real GPU
+- Done on main: `Boolean` parameters, arrays in helpers, `repeat`, labeled `break`/`continue`, `in` ranges, `isNaN`, Kotlin-exact constant math and shifts; GPU-vs-CPU differential tests, a fuzzer, ABI checks and coverage gates
 
 **Later (2.0 and beyond)**
 
@@ -734,4 +753,4 @@ Test every kernel on the CPU with KernelinCpu.dispatch(size) { kernel(...) }.
 - Built-in `Vec2/3/4` and `Mat2/3/4` types with operators; `UInt`, `Short`, `Byte`
 - More backends next to WGSL: SPIR-V (Vulkan), MSL (Metal) and CUDA
 
-See the [changelog](https://github.com/rajumark/kernelin/blob/main/CHANGELOG.md) for released changes.
+See the [changelog](https://github.com/rajumark/kernelin/blob/main/CHANGELOG.md) for released changes and the "Unreleased" list of everything on main.

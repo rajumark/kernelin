@@ -18,7 +18,7 @@
     while ((m = re.exec(code))) {
       out += escapeHtml(code.slice(last, m.index));
       var t = escapeHtml(m[0]);
-      if (m[1]) out += (rawLang !== "bash" && m[1][0] === "#") ? t : '<span class="tok-c">' + t + "</span>";
+      if (m[1]) out += ((rawLang === "bash") !== (m[1][0] === "#")) ? t : '<span class="tok-c">' + t + "</span>";
       else if (m[2]) out += '<span class="tok-s">' + t + "</span>";
       else if (m[3]) out += '<span class="tok-a">' + t + "</span>";
       else if (m[4]) out += '<span class="tok-n">' + t + "</span>";

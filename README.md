@@ -105,3 +105,8 @@ gradle build
 gradle :samples:bench -Pout=/path/to/folder   # then serve the folder and open runner.html
 gradle :samples:exportDemo                     # rebuild the Kotlin/Wasm live demo into docs/demo
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), the compatibility policy in [VERSIONING.md](VERSIONING.md), and
+[SECURITY.md](SECURITY.md) for reporting vulnerabilities. AI agents: start with [AGENTS.md](AGENTS.md).
