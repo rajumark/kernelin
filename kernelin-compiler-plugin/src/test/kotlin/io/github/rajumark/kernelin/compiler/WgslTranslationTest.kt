@@ -212,6 +212,36 @@ class WgslTranslationTest {
         assertContains(text, "only Double constants converted right away")
     }
 
+    @Test
+    fun `helpers named like WGSL built-ins are renamed`() {
+        // Found by a real project: a random-number helper called uniform() shadowed var<uniform> and Chrome
+        // rejected the shader ("cannot use function 'uniform' as address space").
+        val c = KernelinCompiler.compile(
+            """
+            import io.github.rajumark.kernelin.*
+
+            fun uniform(x: Int): Float = (x and 255).toFloat()
+            fun storage(x: Float): Float = x * 2f
+            fun read_write(x: Float): Float = x + 1f
+            fun fract(x: Float): Float = x - x.toInt().toFloat()
+            fun global_invocation_id(): Int = 3
+
+            @Kernel
+            fun k(out: FloatArray) {
+                val i = globalId()
+                out[i] = read_write(storage(uniform(i))) + fract(1.5f) + global_invocation_id()
+            }
+            """.trimIndent(),
+        )
+        assertTrue(c.ok, c.output)
+        val wgsl = c.wgsl("k")
+        for (name in listOf("uniform", "storage", "read_write", "fract", "global_invocation_id")) {
+            assertTrue("fn ${name}_k(" in wgsl, "helper '$name' should be renamed:\n$wgsl")
+            assertTrue("fn $name(" !in wgsl, wgsl)
+        }
+        c.wgslFiles().forEach(Naga::validate)
+    }
+
     // ------------------------------------------------------------------ errors
 
     private fun compileError(source: String): Compilation {

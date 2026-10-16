@@ -1265,7 +1265,19 @@ internal class NameAllocator {
             "snorm", "static", "std", "subroutine", "super", "target", "template", "this", "throw", "trait", "try",
             "type", "typedef", "typeid", "typename", "typeof", "union", "unless", "unorm", "unsafe", "unsized",
             "use", "using", "varying", "virtual", "volatile", "wgsl", "where", "with", "writeonly", "yield",
-            // built-in functions Kernelin emits, so user names never shadow them
+            // predeclared address spaces, access modes, built-in values and type aliases: a helper function with one
+            // of these names would shadow it at module scope (Chrome rejects `fn uniform()`: "cannot use function
+            // 'uniform' as address space")
+            "function", "private", "workgroup", "uniform", "storage", "handle", "read", "write", "read_write",
+            "global_invocation_id", "local_invocation_id", "local_invocation_index", "workgroup_id", "num_workgroups",
+            "vec2f", "vec3f", "vec4f", "vec2i", "vec3i", "vec4i", "vec2u", "vec3u", "vec4u", "vec2h", "vec3h", "vec4h",
+            "mat2x2f", "mat3x3f", "mat4x4f", "texture_2d", "sampler_comparison",
+            // built-in functions, so user names never shadow them
+            "all", "any", "cross", "degrees", "determinant", "distance", "dot", "exp2", "faceForward", "fma", "fract",
+            "frexp", "inverseSqrt", "ldexp", "mix", "modf", "normalize", "quantizeToF16", "radians", "reflect",
+            "refract", "reverseBits", "saturate", "smoothstep", "step", "transpose", "countLeadingZeros",
+            "countOneBits", "countTrailingZeros", "extractBits", "insertBits", "firstLeadingBit", "firstTrailingBit",
+            "storageBarrier", "workgroupBarrier", "atomicAdd", "atomicLoad", "atomicStore",
             "abs", "acos", "arrayLength", "asin", "atan", "atan2", "ceil", "clamp", "cos", "cosh", "exp", "floor",
             "length", "log", "log2", "max", "min", "pow", "round", "select", "sign", "sin", "sinh", "sqrt", "tan",
             "tanh", "trunc",

@@ -22,6 +22,8 @@ New in kernels:
 - `Float.isNaN()`, `isInfinite()`, `isFinite()`.
 
 Fixes (the GPU now matches Kotlin in all of these):
+- Helper functions named like a WGSL built-in (`uniform`, `storage`, `read_write`, `fract`, `dot`, ...) are renamed.
+  Before, Chrome rejected the shader ("cannot use function 'uniform' as address space").
 - Calls to helpers that return `Unit` were left out of the shader.
 - `Float.toInt()`: NaN gives 0, out-of-range values give `Int.MIN_VALUE` / `Int.MAX_VALUE`.
 - Shift counts use only their low 5 bits, as in Kotlin, on every GPU.
