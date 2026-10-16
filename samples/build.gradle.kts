@@ -55,6 +55,15 @@ tasks.register<JavaExec>("bench") {
     argumentProviders.add(CommandLineArgumentProvider { listOf(out.get()) })
 }
 
+// Prints the benchmark's classpath, for scripts/bench-android-cpu.sh to turn into an Android dex.
+tasks.register("printBenchClasspath") {
+    group = "kernelin"
+    description = "Prints the classpath of the CPU benchmark."
+    dependsOn(jvmMain.compileTaskProvider)
+    val classpath = files(jvmMain.output.classesDirs, jvmMain.runtimeDependencyFiles)
+    doLast { println(classpath.files.filter { it.exists() }.joinToString("\n")) }
+}
+
 // Builds the Kotlin/Wasm demo and copies it, plus the generated shader and the kernel source,
 // into docs/demo, which GitHub Pages serves. Run after changing the kernels: gradle :samples:exportDemo
 tasks.register<Copy>("exportDemo") {

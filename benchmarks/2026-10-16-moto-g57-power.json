@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-16",
+  "machine": "Motorola moto g57 power, Qualcomm SM6435 (Snapdragon 6s Gen 4 class), 8 CPU cores, Adreno 7xx GPU, 7.3 GB, Android 17",
+  "cpu": "The same Kotlin kernels on Android ART (dalvikvm -Xmx1g) via KernelinCpu (median of 5 runs after 2 warmups). Run with scripts/bench-android-cpu.sh",
+  "gpu": "WebGPU in Chrome 155 for Android, vendor qualcomm, architecture adreno-7xx. Run with scripts/bench-android.sh",
+  "notes": "gpuKernelMs = data already on GPU, average of 20 back-to-back dispatches, median of 5. gpuEndToEndMs = upload inputs + run + read results back, median of 5. matchPct compares the GPU output with the Kotlin CPU output.",
+  "results": [
+    {"name":"vectorAdd","size":16777216,"gpuKernelMs":14.52,"gpuEndToEndMs":341.7,"cpuSingleMs":224.793,"cpuParallelMs":102.345,"matchPct":100,"maxAbsErr":0},
+    {"name":"saxpy","size":16777216,"gpuKernelMs":14.54,"gpuEndToEndMs":255.1,"cpuSingleMs":221.761,"cpuParallelMs":94.166,"matchPct":100,"maxAbsErr":0},
+    {"name":"blur","size":16777216,"gpuKernelMs":29.31,"gpuEndToEndMs":298.2,"cpuSingleMs":436.153,"cpuParallelMs":129.786,"matchPct":100,"maxAbsErr":5.960464477539063e-8},
+    {"name":"waves","size":4194304,"gpuKernelMs":61.23,"gpuEndToEndMs":125.9,"cpuSingleMs":12014.229,"cpuParallelMs":2034.851,"matchPct":100,"maxAbsErr":0},
+    {"name":"mandelbrot","size":4194304,"gpuKernelMs":47.77,"gpuEndToEndMs":94.4,"cpuSingleMs":1432.033,"cpuParallelMs":412.802,"matchPct":100,"maxAbsErr":0}
+  ]
+}

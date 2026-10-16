@@ -178,12 +178,15 @@ async function runCase(device, c) {
       document.querySelector('#results tbody').appendChild(row);
     }
     const ai = adapter.info || {};
-    window.kernelinResults = { gpu: { vendor: ai.vendor, architecture: ai.architecture }, userAgent: navigator.userAgent, results };
+    window.kernelinResults = { gpu: { vendor: ai.vendor, architecture: ai.architecture, device: ai.device, description: ai.description },
+      userAgent: navigator.userAgent, results };
     status('done');
   } catch (e) {
     status('failed: ' + e.message);
     window.kernelinResults = { error: String(e.stack || e) };
   }
+  // scripts/bench-android.sh serves this page and saves what we POST; plain static servers just ignore it.
+  fetch('results', { method: 'POST', body: JSON.stringify(window.kernelinResults) }).catch(() => {});
 })();
 </script>
 </body>

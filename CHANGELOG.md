@@ -28,6 +28,8 @@ API:
   explicitly (explicit API mode).
 
 Testing:
+- Benchmarked on an Android phone (moto g57 power, Adreno GPU, Chrome): all 5 kernels match the CPU, up to 33×
+  faster than all 8 CPU cores. `scripts/bench-android.sh` and `scripts/bench-android-cpu.sh` reproduce it.
 - GPU-vs-CPU differential tests (WebGPU through Deno) for every feature, in CI on a software GPU.
 - A fuzzer: random valid kernels must give identical results on CPU and GPU (40 per build, 2,000 before this
   release, 300 more on every CI run).

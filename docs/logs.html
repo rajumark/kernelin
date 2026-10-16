@@ -240,6 +240,32 @@
     </div>
   </details>
 
+  <h3>📱 Android phone (Oct 16)</h3>
+  <p>The same 5 kernels on a <b>moto g57 power</b> (Qualcomm SM6435, 8 CPU cores, Adreno 7xx GPU, Android 17). GPU: WebGPU in Chrome 155. CPU: the same Kotlin kernels on Android's ART runtime. Every output matches the Kotlin CPU result.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr>
+      <th>Kernel</th><th class="num">CPU 1 core</th><th class="num">CPU 8 cores</th>
+      <th class="num">GPU kernel</th><th class="num">GPU end-to-end</th><th class="num">Speedup (kernel vs 8 cores)</th><th class="num">Correct</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><b>vectorAdd</b></td><td class="num">225 ms</td><td class="num">102 ms</td><td class="num"><b>14.5 ms</b></td><td class="num">342 ms</td><td class="num">7.0×</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>saxpy</b></td><td class="num">222 ms</td><td class="num">94 ms</td><td class="num"><b>14.5 ms</b></td><td class="num">255 ms</td><td class="num">6.5×</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>blur</b></td><td class="num">436 ms</td><td class="num">130 ms</td><td class="num"><b>29.3 ms</b></td><td class="num">298 ms</td><td class="num">4.4×</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>waves</b></td><td class="num">12.01 s</td><td class="num">2.03 s</td><td class="num"><b>61.2 ms</b></td><td class="num">126 ms</td><td class="num">33×</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>mandelbrot</b></td><td class="num">1.43 s</td><td class="num">413 ms</td><td class="num"><b>47.8 ms</b></td><td class="num">94 ms</td><td class="num">8.6×</td><td class="num"><span class="tag good">100%</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <ul>
+    <li><b>The live demo works on the phone:</b> the race (1600 × 1000 Mandelbrot, 400 iterations) takes <b>35 ms</b> on the GPU vs <b>1.11 s</b> for the same Kotlin kernel as Wasm on 1 CPU core: <b>32× faster</b>, all from Kotlin.</li>
+    <li><b>Heavy math wins on the phone too:</b> waves is 33× faster than all 8 cores and 196× faster than 1 core. End-to-end (with copying) it's still 16× faster.</li>
+    <li><b>Copying is costly on the phone:</b> for the light kernels, upload + download of 128–200 MB takes 250–340 ms, so end-to-end they're 2–3× slower than the CPU. Keep data on the GPU.</li>
+    <li><b>Mandelbrot matches 100% here</b> (99.82% on the M5): the Adreno shader compiler doesn't fuse that multiply-add the way Metal does.</li>
+    <li>The phone is about 4–10× slower than the M5 on both CPU and GPU, as expected for a mid-range phone.</li>
+    <li>Reproduce: <code>scripts/bench-android.sh &lt;bench folder&gt;</code> (GPU, through <code>adb reverse</code>) and <code>scripts/bench-android-cpu.sh</code> (CPU on ART). Raw data: <code>benchmarks/2026-10-16-moto-g57-power.json</code></li>
+  </ul>
+
   <!-- ============================================================ HOW IT WORKS -->
   <h2>⚙️ How it works</h2>
   <div class="flow">

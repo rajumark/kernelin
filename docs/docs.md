@@ -614,6 +614,8 @@ Other tasks:
 
 ```bash
 gradle :samples:bench -Pout=/path/to/folder   # benchmark; then serve the folder and open runner.html
+scripts/bench-android.sh /path/to/folder      # same GPU benchmark in Chrome on a USB-connected Android phone
+scripts/bench-android-cpu.sh                 # the CPU side on the phone (Kotlin on ART)
 gradle :samples:exportDemo                     # rebuild the live demo into docs/demo
 ```
 
@@ -744,7 +746,7 @@ Test every kernel on the CPU with KernelinCpu.dispatch(size) { kernel(...) }.
 
 - IDE errors while you type: FIR checkers, so unsupported code is underlined in IntelliJ IDEA and Android Studio, not only on build
 - Vector types and 2D ids
-- Android: the live demo in Chrome first, then AndroidX WebGPU natively
+- Android: kernels already run and match on a phone GPU in Chrome (see the logs page benchmarks); next, the live demo on phones and AndroidX WebGPU natively
 - Done on main: `Boolean` parameters, arrays in helpers, `repeat`, labeled `break`/`continue`, `in` ranges, `isNaN`, Kotlin-exact constant math and shifts; GPU-vs-CPU differential tests, a fuzzer, ABI checks and coverage gates
 
 **Later (2.0 and beyond)**

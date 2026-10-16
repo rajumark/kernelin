@@ -512,6 +512,11 @@
           <div><b>Method</b>GPU: mean of 20 dispatches, median of 5. CPU: KernelinCpu on JDK 21, median of 5 after warmup.</div>
           <div><b>Correctness</b>GPU output equals the Kotlin CPU output for all 5 kernels (mandelbrot: 99.8% of pixels, float rounding).</div>
         </div>
+        <div class="bench-notes">
+          <div><b>Also on Android</b>moto g57 power: Adreno 7xx GPU in Chrome 155 vs the same Kotlin on ART, all 8 cores.</div>
+          <div><b>Speedup</b>waves 33×, mandelbrot 8.6×, vectorAdd 7×, saxpy 6.5×, blur 4.4× (GPU kernel vs all CPU cores).</div>
+          <div><b>Correctness</b>All 5 kernels: 100% of outputs equal the Kotlin CPU output on the Qualcomm GPU.</div>
+        </div>
       </div>
     </section>
   </div>

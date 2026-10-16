@@ -14,7 +14,7 @@ import kotlin.random.Random
  * Usage: `./gradlew :samples:bench -Pout=<dir>`, then open runner.html served from <dir>.
  */
 fun main(args: Array<String>) {
-    val out = File(args.getOrElse(0) { "build/kernelin-bench" }).apply { mkdirs() }
+    val timeOnly = "--time-only" in args
     val cores = Runtime.getRuntime().availableProcessors()
     println("Kernelin CPU benchmark - ${System.getProperty("java.vm.name")} ${System.getProperty("java.version")}, $cores cores")
 
@@ -25,6 +25,15 @@ fun main(args: Array<String>) {
         wavesCase(4 shl 20, rounds = 64),
         mandelbrotCase(2048, 2048, maxIter = 256),
     )
+    // --time-only: just time the kernels and print the timings as JSON, e.g. on a phone (scripts/bench-android-cpu.sh).
+    if (timeOnly) {
+        cases.forEach { it.measure() }
+        println(cases.joinToString(",", prefix = "CPU_RESULTS [", postfix = "]") {
+            "{\"name\":\"${it.name}\",\"cpuSingleMs\":${"%.3f".format(it.singleMs)},\"cpuParallelMs\":${"%.3f".format(it.parallelMs)}}"
+        })
+        return
+    }
+    val out = File(args.getOrElse(0) { "build/kernelin-bench" }).apply { mkdirs() }
     val json = cases.joinToString(",\n", prefix = "[\n", postfix = "\n]\n") { it.export(out) }
     out.resolve("cases.json").writeText(json)
     out.resolve("cpu-info.json").writeText(
