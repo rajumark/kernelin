@@ -6,9 +6,9 @@ Security fixes go into the latest release.
 
 ## Reporting a vulnerability
 
-Please don't describe a security problem in a public issue. Use GitHub's private vulnerability reporting
-(**Security → Report a vulnerability** on https://github.com/rajumark/kernelin) when it's available, or open an
-issue titled "Security contact request" without any details and you'll be contacted privately.
+Please don't describe a security problem in a public issue. Report it privately on GitHub:
+**Security → Report a vulnerability** on https://github.com/rajumark/kernelin
+(direct link: https://github.com/rajumark/kernelin/security/advisories/new).
 
 Include what you found, how to reproduce it and the Kernelin and Kotlin versions. You'll get an answer within
 7 days.
