@@ -211,12 +211,13 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 | Operators | `+ - * / %`, unary `-`, `++ --`, `+= -= *= /= %=`, comparisons, `&& \|\| !`, `and or xor inv shl shr ushr` (since 0.2.0, shift counts use their low 5 bits, exactly like Kotlin, on every GPU) |
 | Conversions | `toFloat()`, `toInt()`; mixed `Int`/`Float` math is promoted like Kotlin |
 | Conditions | `if`/`else`, `when` (with or without a subject), both as statements and as values |
-| Loops | `for` over Int ranges: `a until b`, `a..b`, `a..<b`, `a downTo b`, `step n`, `array.indices`; `while`, `do-while`, `break`, `continue` |
+| Loops | `for` over Int ranges: `a until b`, `a..b`, `a..<b`, `a downTo b`, `step n`, `array.indices`; `while`, `do-while`, `break`, `continue`. **(Unreleased)**: ranges that end at or near `Int.MAX_VALUE` / `Int.MIN_VALUE` (like `0..Int.MAX_VALUE`) and runtime steps stop exactly like Kotlin; one `step` per range |
 | More loops **(0.2.0)** | `repeat(n) { }` (with `return@repeat`), labeled `break@outer` / `continue@outer` at any depth |
 | Ranges **(0.2.0)** | `x in a..b`, `until`, `..<`, `downTo`, `x !in ...`, `when (x) { in a..b -> }` for Int and Float (`step` inside `in` is an error) |
 | Arrays | `a[i]`, `a[i] = v`, `a[i] += v`, `a.size`, `a.indices` |
 | Math | `kotlin.math` Float versions: `sqrt sin cos tan asin acos atan atan2 sinh cosh tanh exp ln log2 log10 pow hypot floor ceil round truncate abs sign min max` |
 | Clamping | `coerceIn`, `coerceAtLeast`, `coerceAtMost` |
+| Float rules **(Unreleased)** | `min`, `max`, `coerceIn`, `coerceAtLeast`, `coerceAtMost`, `sign` and `compareTo` give Kotlin's exact results for NaN and `-0f` (`min(-0f, 0f)` is `-0f`, `min(x, NaN)` is NaN, `NaN.compareTo(x)` is 1); `hypot` doesn't overflow for big values, and `log10` is accurate near 1 |
 | Constants | `PI.toFloat()`, `E.toFloat()`, `1.5.toFloat()`, `1.5.toInt()` (a Double constant converted right away) |
 | Constant math **(0.2.0)** | All-constant expressions are computed at build time with Kotlin's rules (wrapping, Infinity/NaN), e.g. `-75 shl 28`; `Float.POSITIVE_INFINITY`, `NEGATIVE_INFINITY` and `NaN` constants are allowed |
 | Float checks **(0.2.0)** | `isNaN()`, `isInfinite()`, `isFinite()`; `Float.toInt()` matches Kotlin exactly (NaN → 0, too large → `Int.MAX_VALUE`, too small → `Int.MIN_VALUE`) |
@@ -436,6 +437,9 @@ The same kernel gives the same results on the CPU and the GPU, with these known 
 | Case | On the CPU (Kotlin) | On the GPU (WGSL) |
 |---|---|---|
 | Float rounding in `sin`, `exp`, `pow`, … | IEEE 754 double-backed results | 32-bit, may differ in the last bits. Compare with a tolerance |
+| `for (i in a..b step s)` with `s` 0 or less | Throws `IllegalArgumentException` | **No iterations** (unreleased; a constant step of 0 or less is a compile error). Before, the loop never ended |
+| `min`, `max`, `coerceIn`, `sign`, `compareTo` with NaN or `-0f` | NaN wins in `min`/`max`, `-0f < 0f`, NaN is the largest in `compareTo` | **Same as Kotlin** (unreleased). WGSL leaves these unspecified, so 0.2.0 and older may differ |
+| `hypot`, `log10` | Computed in Double, rounded once | **Within 2 ULPs (`hypot`) and 4 ULPs (`log10`)** (unreleased). Before, `hypot` overflowed to Infinity for values above about 1e19 |
 | `pow` with a negative or zero base | `(-2f).pow(3f) == -8f`, `(-2f).pow(0.5f)` is NaN | **Same as Kotlin** (unreleased). WGSL leaves these undefined, so 0.2.0 and older may return NaN on Vulkan GPUs |
 | Float division by zero (`x / 0f`) | `Infinity` or `NaN` | **Not guaranteed.** WGSL leaves it undefined; some GPUs (for example llvmpipe, used in CI) return an ordinary number. Check the divisor yourself |
 | `Infinity` / `NaN` that arrive in a buffer | Normal Kotlin behaviour | **Same as Kotlin** (since 0.2.0): `isNaN()`, `isInfinite()`, `isFinite()` and `toInt()` check the raw bits |
@@ -474,6 +478,8 @@ Common messages and fixes:
 | `creating objects or arrays isn't supported in kernels` | Pass arrays in as kernel parameters |
 | `'kotlin.collections.sum' can't run on the GPU` | Write the loop yourself |
 | `for loops must iterate over an Int range (until, .., ..<, downTo, step, indices)` | Use an Int range |
+| `step must be positive, but it is 0 (Kotlin throws IllegalArgumentException)` | Use a step of 1 or more |
+| `only one step per range is supported; combine the steps into one` | Write one `step` |
 | `an if/when used as a value needs an else branch` | Add `else` |
 | `integer division by zero (Kotlin would throw ArithmeticException here)` **(0.2.0)** | Fix the constant divisor |
 | `kernelSource() was not replaced: apply the Kernelin compiler plugin` (at runtime) | Apply the Gradle plugin to that module |
@@ -481,6 +487,8 @@ Common messages and fixes:
 ### Errors in your IDE **(0.2.0)**
 
 Kernelin checks kernels in the K2 frontend too (FIR checkers), so IntelliJ IDEA and Android Studio underline unsupported code **while you type**, with the same messages as the build. The frontend checks cover the common mistakes: kernel signature, parameter and variable types, `Double`/`Long`/`String` values, lambdas, library calls, object creation, exceptions, casts and nullable values. Everything else (for example recursion or unsupported loop shapes) is still checked when you build.
+
+**(Unreleased)** The same checks run on your helper functions that a kernel calls (and the helpers they call), plus the helper rules (return and parameter types, top-level, no type parameters). A helper in the kernel's file gets the error on its own code, ending with `(in helper 'h', called from @Kernel k)`. A helper in another file gets one error on the call in the kernel, naming the helper's file, because the IDE shows a file's errors only while it checks that file.
 
 To see them in the IDE:
 
@@ -490,7 +498,7 @@ To see them in the IDE:
 
 Frontend errors stop the build before the translator runs. If a kernel has both kinds of mistakes, the remaining errors show up after you fix the first ones.
 
-When a kernel translates, the build log shows `Kernelin: translated @Kernel com.example.saxpy to WGSL (N lines)`.
+With the compiler's `-verbose` flag, the build log shows `Kernelin: translated @Kernel com.example.saxpy to WGSL (N lines)` for each kernel (since the unreleased version; before, every build printed it).
 
 ## API reference
 
@@ -717,11 +725,11 @@ Quality checks, all part of `gradle build`:
 
 | Check | What it does |
 |---|---|
-| Fuzzer (`KernelFuzzTest`) | Random valid Int kernels must give identical results on CPU and GPU. 40 per build, 300 fresh ones on every CI run; run more with `-Pkernelin.fuzz.count=1000` (`-Pkernelin.fuzz.seed=N` to repeat a run) |
+| Fuzzer (`KernelFuzzTest`) | Random valid Int kernels (with exact Float values like NaN and `-0f`, and loops near `Int.MAX_VALUE`) must give identical results on CPU and GPU. 40 per build, 300 fresh ones on every CI run; run more with `-Pkernelin.fuzz.count=1000` (`-Pkernelin.fuzz.seed=N` to repeat a run) |
 | ABI validation | The public API of every module is recorded in `api/` and checked by `checkKotlinAbi`; explicit API mode and KDoc on all public API |
 | Coverage | Kover, currently 86%; the build fails below 80%. Report: `gradle koverHtmlReport` |
 
-47 tests in total: 36 compiler tests (including 13 GPU tests, 7 IDE-check tests and the fuzzer), 6 runtime, 5 samples.
+88 tests in total: 52 compiler tests (including 20 GPU tests, 9 IDE-check tests and the fuzzer), 9 runtime, 15 WebGPU host, 7 Gradle plugin, 5 samples.
 
 Other tasks:
 

@@ -80,8 +80,9 @@ class KernelinIrGenerationExtension(
             return null
         }
         val shader = result.shader!!.let { CompiledShader(fqName, it.wgsl, it.manifestJson(fqName)) }
+        // Only with the compiler's -verbose flag: a line per kernel is noise in a normal build log.
         messages.report(
-            CompilerMessageSeverity.INFO,
+            CompilerMessageSeverity.LOGGING,
             "Kernelin: translated @Kernel $fqName to WGSL (${shader.wgsl.lines().size} lines)",
         )
         if (outputDir != null) {

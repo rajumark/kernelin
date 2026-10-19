@@ -1,5 +1,6 @@
 package io.github.rajumark.kernelin.compiler
 
+import kotlin.math.pow
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -349,6 +350,147 @@ class GpuDifferentialTest {
             """,
             "k", n, mapOf("a" to base, "b" to exp, "out" to FloatArray(n), "outInt" to FloatArray(n)),
             absTol = 1e-4, relTol = 1e-4,
+        )
+    }
+
+    // Ranges from data, with ends near Int.MIN_VALUE / MAX_VALUE and big steps. A loop that went past its end
+    // used to wrap around and never stop on the GPU; the `n > 40` break keeps such a bug finite in this test.
+    private val loopKernel = """
+        @Kernel
+        fun k(a: IntArray, b: IntArray, s: IntArray, up: IntArray, until: IntArray, down: IntArray, fixed: IntArray) {
+            val i = globalId()
+            var n = 0
+            var sum = 0
+            for (j in a[i]..b[i] step s[i]) { n++; sum += j; if (n > 40) break }
+            up[i] = n * 1000003 + sum
+            n = 0; sum = 0
+            for (j in a[i] until b[i] step s[i]) { n++; sum += j; if (n > 40) break }
+            until[i] = n * 1000003 + sum
+            n = 0; sum = 0
+            for (j in b[i] downTo a[i] step s[i]) { n++; sum += j; if (n > 40) break }
+            down[i] = n * 1000003 + sum
+            n = 0
+            for (j in Int.MAX_VALUE - 5..Int.MAX_VALUE) { n++; if (n > 40) break }
+            for (j in Int.MIN_VALUE + 5 downTo Int.MIN_VALUE) { n++; if (n > 40) break }
+            for (j in 0..Int.MAX_VALUE) { n++; if (n > 50) break }
+            for (j in Int.MAX_VALUE - 9 until Int.MAX_VALUE step 4) { n += 100 }
+            fixed[i] = n
+        }
+    """
+
+    @Test
+    fun `for loops stop at the end of the range like Kotlin, even near Int MAX_VALUE`() {
+        val big = 1 shl 30
+        val edge = listOf(
+            Triple(0, Int.MAX_VALUE, big), Triple(Int.MAX_VALUE - 10, Int.MAX_VALUE, 1),
+            Triple(Int.MAX_VALUE - 10, Int.MAX_VALUE, 3), Triple(Int.MIN_VALUE, Int.MIN_VALUE + 10, 3),
+            Triple(Int.MIN_VALUE, Int.MAX_VALUE, big + 7), Triple(-big, big, big), Triple(5, 5, 1),
+            Triple(6, 5, 1), Triple(Int.MIN_VALUE, Int.MIN_VALUE, 1), Triple(Int.MAX_VALUE, Int.MAX_VALUE, 2),
+            Triple(-3, Int.MIN_VALUE, 1), Triple(Int.MAX_VALUE - 1, Int.MAX_VALUE, Int.MAX_VALUE),
+        )
+        val size = 1024
+        val r = Random(16)
+        val rows = List(size) { i -> edge.getOrElse(i) { Triple(r.nextInt(-50, 50), r.nextInt(-50, 50), r.nextInt(1, 7)) } }
+        GpuDifferential.assertSame(
+            loopKernel, "k", size,
+            mapOf(
+                "a" to IntArray(size) { rows[it].first }, "b" to IntArray(size) { rows[it].second },
+                "s" to IntArray(size) { rows[it].third },
+                "up" to IntArray(size), "until" to IntArray(size), "down" to IntArray(size), "fixed" to IntArray(size),
+            ),
+        )
+    }
+
+    @Test
+    fun `a step of zero or less runs no iterations on the GPU`() {
+        // Kotlin throws IllegalArgumentException here, so there is no CPU result: the GPU must just skip the loop.
+        val size = 4
+        val gpu = GpuDifferential.runGpu(
+            GpuDifferential.compile(loopKernel), "k", size,
+            mapOf(
+                "a" to IntArray(size) { 0 }, "b" to IntArray(size) { 10 }, "s" to intArrayOf(0, -1, Int.MIN_VALUE, -5),
+                "up" to IntArray(size), "until" to IntArray(size), "down" to IntArray(size), "fixed" to IntArray(size),
+            ),
+        )
+        for (name in listOf("up", "until", "down")) {
+            assertEquals(listOf(0, 0, 0, 0), (gpu.getValue(name) as IntArray).toList(), name)
+        }
+    }
+
+    @Test
+    fun `Float min, max, coerce, compareTo and sign match Kotlin for NaN and -0f`() {
+        // Every pair of special values, then random values with some NaN and -0f mixed in. WGSL leaves min/max
+        // with NaN and the sign of a zero result unspecified; Kotlin defines both. Compared bit for bit.
+        val special = floatArrayOf(Float.NaN, -0f, 0f, 1f, -1f, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY, 2.5f, -0.5f)
+        val pairs = special.size * special.size
+        val size = pairs + 2000
+        val r = Random(17)
+        fun pick(i: Int, f: (Int) -> Int) = if (i < pairs) special[f(i)] else when (r.nextInt(8)) {
+            0 -> Float.NaN
+            1 -> -0f
+            2 -> 0f
+            else -> (r.nextFloat() * 2f - 1f) * 4f
+        }
+        val a = FloatArray(size) { pick(it) { i -> i / special.size } }
+        val b = FloatArray(size) { pick(it) { i -> i % special.size } }
+        GpuDifferential.assertSame(
+            """
+            @Kernel
+            fun k(a: FloatArray, b: FloatArray, mn: FloatArray, mx: FloatArray, co: FloatArray, lohi: FloatArray, sg: FloatArray, cmp: IntArray) {
+                val i = globalId()
+                val x = a[i]
+                val y = b[i]
+                mn[i] = min(x, y)
+                mx[i] = max(x, y)
+                // Kotlin throws when the minimum is above the maximum, so keep the bounds in order.
+                co[i] = if (y <= 1f || y.isNaN()) x.coerceIn(y, 1f) else x.coerceIn(1f, y)
+                lohi[2 * i] = x.coerceAtLeast(y)
+                lohi[2 * i + 1] = x.coerceAtMost(y)
+                sg[i] = sign(x)
+                cmp[i] = x.compareTo(y) + 3 * x.compareTo(i % 3) + 9 * y.compareTo(-0f)
+            }
+            """,
+            "k", size,
+            mapOf(
+                "a" to a, "b" to b, "mn" to FloatArray(size), "mx" to FloatArray(size), "co" to FloatArray(size),
+                "lohi" to FloatArray(2 * size), "sg" to FloatArray(size), "cmp" to IntArray(size),
+            ),
+            exactFloats = true,
+        )
+    }
+
+    @Test
+    fun `hypot and log10 stay accurate for very big, very small and near-1 values`() {
+        // length(vec2(x, y)) squares its inputs, so hypot(1e30f, 1e30f) overflowed and hypot(1e-30f, 0f) gave 0;
+        // log(x) * 0.434f lost most digits near x = 1. Kotlin computes both in Double and rounds once.
+        val r = Random(18)
+        val special = floatArrayOf(
+            0f, -0f, 1f, 10f, 100f, 1000f, 1e-30f, 1e30f, 3e38f, -1f, Float.NaN, Float.POSITIVE_INFINITY,
+            1.0000001f, 0.99999994f, 1.0001f, 0.9999f, 1.5f, 0.70710677f, 2f, 0.5f,
+        )
+        val size = 4096
+        val a = FloatArray(size) { i ->
+            special.getOrElse(i) {
+                when (r.nextInt(3)) {
+                    0 -> 1f + (r.nextFloat() - 0.5f) * 1e-3f
+                    1 -> 10f.pow(r.nextFloat() * 60f - 30f)
+                    else -> r.nextFloat() * 100f
+                }
+            }
+        }
+        val b = FloatArray(size) { i -> if (i < special.size) special[(i * 7) % special.size] else 10f.pow(r.nextFloat() * 60f - 30f) }
+        GpuDifferential.assertSame(
+            """
+            @Kernel
+            fun k(a: FloatArray, b: FloatArray, h: FloatArray, l: FloatArray) {
+                val i = globalId()
+                h[i] = hypot(a[i], b[i])
+                l[i] = log10(a[i])
+            }
+            """,
+            "k", size, mapOf("a" to a, "b" to b, "h" to FloatArray(size), "l" to FloatArray(size)),
+            // A few ULPs: WGSL's division and sqrt aren't correctly rounded.
+            absTol = 0.0, relTol = 1e-6,
         )
     }
 }

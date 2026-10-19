@@ -29,15 +29,19 @@ object KernelinCompiler {
         ?: error("kernelin.pluginJar is not set; run the tests through Gradle")
 
     /** Compiles [source] alone; with [out] from an earlier compilation, like an incremental build does. */
-    fun compile(source: String, fileName: String = "Kernels.kt", out: File? = null): Compilation {
+    fun compile(source: String, fileName: String = "Kernels.kt", out: File? = null): Compilation =
+        compileFiles(mapOf(fileName to source), out)
+
+    /** Compiles several source files (file name to source) into one module; [out] as for [compile]. */
+    fun compileFiles(files: Map<String, String>, out: File? = null): Compilation {
         val dir = Files.createTempDirectory("kernelin-test").toFile()
-        val src = dir.resolve("src/$fileName").apply { parentFile.mkdirs(); writeText(source) }
+        val srcs = files.map { (name, text) -> dir.resolve("src/$name").apply { parentFile.mkdirs(); writeText(text) }.path }
         val classpath = listOfNotNull(out?.path, System.getProperty("java.class.path")).joinToString(File.pathSeparator)
         val out = out ?: dir.resolve("out").apply { mkdirs() }
         val buffer = ByteArrayOutputStream()
         val exit = K2JVMCompiler().exec(
             PrintStream(buffer),
-            src.path,
+            *srcs.toTypedArray(),
             "-d", out.path,
             "-classpath", classpath,
             "-no-stdlib", "-no-reflect",

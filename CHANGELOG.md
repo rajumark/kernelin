@@ -20,6 +20,27 @@ Fixes (the GPU now matches Kotlin in all of these):
   already decided the result. It now runs only when Kotlin evaluates `b`.
 - `Float.pow` with a negative base (`(-2f).pow(3f) == -8f`) or a zero base: WGSL leaves these undefined, and
   Vulkan GPUs return NaN. Kernelin now handles the sign and the special cases itself, like Kotlin.
+- `for` loops whose range ends at or near `Int.MAX_VALUE` / `Int.MIN_VALUE` (like `0..Int.MAX_VALUE`, or
+  `a..b step s` from data) wrapped around and never ended on the GPU. Such loops now count their steps up front,
+  like Kotlin's `IntProgression`. A step of 0 or less (Kotlin throws) runs no iterations instead of looping
+  forever; a constant one is a compile error, and so is a second `step` on the same range.
+- `min`, `max`, `coerceIn`, `coerceAtLeast`, `coerceAtMost`, `sign` and `compareTo` on Float: WGSL leaves NaN and
+  the sign of zero unspecified. They now follow Kotlin exactly (`min(-0f, 0f)` is `-0f`, `max(1f, NaN)` is NaN,
+  `sign(-0f)` is `-0f`, `NaN.compareTo(1f)` is 1), checked bit for bit on the GPU. Constant `-0f < 0f` is now
+  `false` (it was folded with `compareTo`).
+- `hypot` overflowed to Infinity for values above about 1e19 and gave 0 below about 1e-19; it is now scaled and
+  within 2 ULPs of Kotlin. `log10` lost most digits near 1; it is now within 4 ULPs of Kotlin.
+- The kernel manifest (`.json`) put kernel and parameter names in without escaping, so a backticked name with a
+  quote made invalid JSON.
+
+IDE checks:
+- The frontend (FIR) checks now also run on the helper functions a kernel calls, so unsupported code in a helper is
+  underlined while you type, not only reported by the build. Helpers in the kernel's file get the error on their own
+  code; helpers in other files get it on the call in the kernel.
+
+Build:
+- The `Kernelin: translated @Kernel ... to WGSL` line for each kernel now shows only with the compiler's
+  `-verbose` flag.
 
 Build fixes:
 - Incremental builds: when only the file calling `kernelSource(::k)` was recompiled, without the file holding

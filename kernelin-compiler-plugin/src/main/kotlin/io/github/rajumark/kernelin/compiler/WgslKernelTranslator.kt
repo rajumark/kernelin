@@ -60,45 +60,65 @@ internal enum class WType(val wgsl: String, val kotlin: String) {
 
 internal class KernelError(val element: IrElement, val message: String, val file: IrFile?)
 
-internal class BufferParam(val name: String, val elementType: WType, val binding: Int) {
+/** A kernel parameter: an array ([BufferParam]) or a single value ([ScalarParam]). */
+internal sealed interface KernelParam {
+    val name: String
+}
+
+internal class BufferParam(override val name: String, val elementType: WType, val binding: Int) : KernelParam {
     var written = false
 }
 
-internal class ScalarParam(val name: String, val type: WType)
+internal class ScalarParam(override val name: String, val type: WType) : KernelParam
 
 internal class TranslationResult(val shader: WgslShader?, val errors: List<KernelError>)
 
 /** A translated kernel: WGSL source plus the information a GPU host needs to run it. */
 internal class WgslShader(
     val wgsl: String,
-    /** Kernel parameters in Kotlin order; each is a [BufferParam] or a [ScalarParam]. */
-    val params: List<Any>,
+    /** Kernel parameters in Kotlin order. */
+    val params: List<KernelParam>,
 ) {
     val buffers get() = params.filterIsInstance<BufferParam>()
     val scalars get() = params.filterIsInstance<ScalarParam>()
 
     fun manifestJson(fqName: String): String = buildString {
         appendLine("{")
-        appendLine("  \"kernel\": \"$fqName\",")
+        appendLine("  \"kernel\": ${json(fqName)},")
         appendLine("  \"entryPoint\": \"main\",")
         appendLine("  \"workgroupSize\": $WORKGROUP_SIZE,")
         appendLine("  \"uniform\": { \"binding\": 0, \"fields\": [")
         val fields = listOf("{ \"name\": \"kernelin_size\", \"type\": \"u32\" }") +
-            scalars.map { "{ \"name\": \"${it.name}\", \"type\": \"${it.type.uniformWgsl}\" }" }
+            scalars.map { "{ \"name\": ${json(it.name)}, \"type\": ${json(it.type.uniformWgsl)} }" }
         appendLine(fields.joinToString(",\n") { "    $it" })
         appendLine("  ] },")
         appendLine("  \"params\": [")
         appendLine(params.joinToString(",\n") { p ->
             when (p) {
-                is BufferParam -> "    { \"name\": \"${p.name}\", \"kind\": \"buffer\", \"type\": \"${p.elementType.wgsl}\", " +
+                is BufferParam -> "    { \"name\": ${json(p.name)}, \"kind\": \"buffer\", \"type\": ${json(p.elementType.wgsl)}, " +
                     "\"binding\": ${p.binding}, \"access\": \"${if (p.written) "read_write" else "read"}\" }"
-                is ScalarParam -> "    { \"name\": \"${p.name}\", \"kind\": \"scalar\", \"type\": \"${p.type.wgsl}\" }"
-                else -> error("unexpected param $p")
+                is ScalarParam -> "    { \"name\": ${json(p.name)}, \"kind\": \"scalar\", \"type\": ${json(p.type.wgsl)} }"
             }
         })
         appendLine("  ]")
         appendLine("}")
     }
+}
+
+/** [s] as a JSON string literal. Kernel names in backticks may hold quotes, backslashes and other characters. */
+internal fun json(s: String): String = buildString {
+    append('"')
+    for (c in s) {
+        when {
+            c == '"' -> append("\\\"")
+            c == '\\' -> append("\\\\")
+            c == '\n' -> append("\\n")
+            c == '\t' -> append("\\t")
+            c < ' ' || c == '\u2028' || c == '\u2029' -> append("\\u").append(c.code.toString(16).padStart(4, '0'))
+            else -> append(c)
+        }
+    }
+    append('"')
 }
 
 /**
@@ -112,12 +132,23 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
     private val names = NameAllocator()
     private val buffers = LinkedHashMap<IrValueParameter, BufferParam>()
     private val scalars = LinkedHashMap<IrValueParameter, ScalarParam>()
-    private val params = mutableListOf<Any>()
+    private val params = mutableListOf<KernelParam>()
     private val helpers = LinkedHashMap<Any, Helper>()
     private val helperStack = ArrayDeque<IrSimpleFunction>()
     private var usesFloatToInt = false
     private var usesFloatChecks = false
     private var usesPow = false
+
+    /** Kernelin's own WGSL functions this shader calls (see [RUNTIME_FUNCTIONS]), in a fixed order. */
+    private val runtime = sortedSetOf<String>()
+
+    /** Marks runtime function [name] (and the NaN check it builds on) as used and returns [name]. */
+    private fun use(name: String): String {
+        runtime += name
+        usesFloatChecks = true
+        usesSpecialFloats = true
+        return name
+    }
 
     /**
      * Counts emitted side effects: array writes, and calls to helpers that write arrays. Comparing it before and
@@ -288,6 +319,11 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 appendLine("  }")
                 appendLine("  return r;")
                 appendLine("}")
+            }
+            for (name in runtime) {
+                appendLine()
+                append(RUNTIME_FUNCTIONS.getValue(name).trimIndent())
+                appendLine()
             }
             for (h in helpers.values) {
                 appendLine()
@@ -719,51 +755,119 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             }
             val i = names.allocate(loopVar.name.asString())
             locals[loopVar] = Expr(i, WType.I32)
+            val body = { whileBody.statements.drop(1).forEach(::statement) }
             block("") {
                 pre.forEach(::line)
+                if (range.cannotOverflow()) {
+                    // The plain loop: `i + step` stays within Int whenever the loop goes on.
+                    val end = names.allocate("kernelin_end", internal = true)
+                    line("let $end: i32 = ${cast(range.end, WType.I32)};")
+                    val step = range.step.const?.let { constant(it as Int) } ?: names.allocate("kernelin_step", internal = true).also {
+                        line("let $it: i32 = ${cast(range.step, WType.I32)};")
+                    }
+                    val cmp = when {
+                        range.descending -> if (range.inclusive) ">=" else ">"
+                        else -> if (range.inclusive) "<=" else "<"
+                    }
+                    val update = if (range.descending) "$i - $step" else "$i + $step"
+                    loop(whileLoop) {
+                        block("for (var $i: i32 = ${cast(range.start, WType.I32)}; $i $cmp $end; $i = $update)") { body() }
+                    }
+                    return@block
+                }
+                // Like Kotlin's IntProgression: count the steps up front, so the loop always ends, even when the
+                // last element is next to Int.MAX_VALUE / MIN_VALUE (where `i + step` would wrap around).
+                val first = names.allocate("kernelin_first", internal = true)
                 val end = names.allocate("kernelin_end", internal = true)
-                line("let $end: i32 = ${range.end};")
-                val step = if (range.step.isIntLiteral()) range.step else names.allocate("kernelin_step", internal = true).also {
-                    line("let $it: i32 = ${range.step};")
+                line("let $first: i32 = ${cast(range.start, WType.I32)};")
+                line("let $end: i32 = ${cast(range.end, WType.I32)};")
+                val stepConst = range.step.const as Int?
+                val step = stepConst?.let { constant(it) } ?: names.allocate("kernelin_step", internal = true).also {
+                    line("let $it: i32 = ${cast(range.step, WType.I32)};")
                 }
-                val cmp = when {
-                    range.descending -> if (range.inclusive) ">=" else ">"
-                    else -> if (range.inclusive) "<=" else "<"
+                val stepU = stepConst?.let { "${it}u" } ?: "u32($step)"
+                // Kotlin throws for a step of 0 or less; the GPU can't throw, so the loop runs no iterations.
+                val nonEmpty = when {
+                    range.descending -> "$first >= $end"
+                    range.inclusive -> "$first <= $end"
+                    else -> "$first < $end"
                 }
-                val update = if (range.descending) "$i - $step" else "$i + $step"
-                loop(whileLoop) {
-                    block("for (var $i: i32 = ${range.start}; $i $cmp $end; $i = $update)") {
-                        whileBody.statements.drop(1).forEach(::statement)
+                val left = names.allocate("kernelin_left", internal = true)
+                // Distance from the first to the last value as u32: it fits even for Int.MIN_VALUE..Int.MAX_VALUE.
+                val distance = when {
+                    range.descending -> "(u32($first) - u32($end))"
+                    range.inclusive -> "(u32($end) - u32($first))"
+                    else -> "(u32($end) - u32($first) - 1u)"
+                }
+                val bits = "bitcast<u32>($step)"
+                block(if (stepConst == null) "if ($step > 0i && $nonEmpty)" else "if ($nonEmpty)") {
+                    line("var $i: i32 = $first;")
+                    line("var $left: u32 = $distance / $stepU;")
+                    loop(whileLoop) {
+                        block("loop") {
+                            body()
+                            block("continuing") {
+                                // Wraps only after the last iteration, when the value is no longer used.
+                                line("$i = bitcast<i32>(bitcast<u32>($i) ${if (range.descending) "-" else "+"} $bits);")
+                                line("$left = $left - 1u;")
+                                line("break if $left == 4294967295u;")
+                            }
+                        }
                     }
                 }
             }
         }
 
+        /**
+         * A range to loop over. [start], [end] and [step] are Int expressions; [step] is positive for both
+         * directions (as written after `step`), [descending] for `downTo`.
+         */
         private inner class Range(
-            val start: String,
-            val end: String,
-            val step: String,
+            val start: Expr,
+            val end: Expr,
+            val step: Expr,
             val inclusive: Boolean,
             val descending: Boolean,
-        )
+            val stepped: Boolean = false,
+        ) {
+            /** True when a plain `for (i = start; i < end; i += step)` can never wrap around (and step > 0). */
+            fun cannotOverflow(): Boolean {
+                val s = step.const as? Int ?: return false
+                val e = end.const as? Int
+                return when {
+                    descending -> e != null && e >= Int.MIN_VALUE + s
+                    // i < end <= Int.MAX_VALUE, so i + 1 always fits.
+                    !inclusive && s == 1 -> true
+                    !inclusive -> e != null && e.toLong() - 1 + s <= Int.MAX_VALUE
+                    else -> e != null && e.toLong() + s <= Int.MAX_VALUE
+                }
+            }
+        }
 
         private fun range(e: IrExpression, pre: MutableList<String>): Range? {
             val call = e as? IrCall ?: return null.also { fail(e, "for loops must iterate over an Int range like 0 until n") }
             val fn = call.symbol.owner
             val name = fn.name.asString()
-            fun int(arg: IrExpression) = cast(expr(arg, pre), WType.I32)
+            fun int(arg: IrExpression) = expr(arg, pre).let { if (it.type == WType.I32) it else Expr(cast(it, WType.I32), WType.I32) }
+            val one = lit(1)
             return when (name) {
-                "until", "rangeUntil" -> Range(int(call.receiver()!!), int(call.regularArgs()[0]), "1i", inclusive = false, descending = false)
-                "rangeTo" -> Range(int(call.receiver()!!), int(call.regularArgs()[0]), "1i", inclusive = true, descending = false)
-                "downTo" -> Range(int(call.receiver()!!), int(call.regularArgs()[0]), "1i", inclusive = true, descending = true)
+                "until", "rangeUntil" -> Range(int(call.receiver()!!), int(call.regularArgs()[0]), one, inclusive = false, descending = false)
+                "rangeTo" -> Range(int(call.receiver()!!), int(call.regularArgs()[0]), one, inclusive = true, descending = false)
+                "downTo" -> Range(int(call.receiver()!!), int(call.regularArgs()[0]), one, inclusive = true, descending = true)
                 "<get-indices>" -> {
                     val buffer = arrayBuffer(call.receiver()!!)
                         ?: return null.also { fail(call, "indices must be read from a kernel array parameter") }
-                    Range("0i", "i32(arrayLength(&${buffer.name}))", "1i", inclusive = false, descending = false)
+                    Range(lit(0), Expr("i32(arrayLength(&${buffer.name}))", WType.I32), one, inclusive = false, descending = false)
                 }
                 "step" -> {
                     val inner = range(call.receiver()!!, pre) ?: return null
-                    Range(inner.start, inner.end, int(call.regularArgs()[0]), inner.inclusive, inner.descending)
+                    if (inner.stepped) return null.also { fail(call, "only one step per range is supported; combine the steps into one") }
+                    val step = int(call.regularArgs()[0])
+                    val s = step.const as? Int
+                    if (s != null && s <= 0) {
+                        return null.also { fail(call, "step must be positive, but it is $s (Kotlin throws IllegalArgumentException)") }
+                    }
+                    Range(inner.start, inner.end, step, inner.inclusive, inner.descending, stepped = true)
                 }
                 else -> null.also { fail(call, "for loops must iterate over an Int range (until, .., ..<, downTo, step, indices)") }
             }
@@ -970,6 +1074,12 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 }
                 val x = cast(xe, t)
                 val a = ae.map { cast(it, t) }
+                // Float: Kotlin's comparisons, so NaN and -0f come out as on the CPU (WGSL's clamp/min/max don't say).
+                if (t == WType.F32) return when (name) {
+                    "coerceIn" -> Expr("${use("kernelin_coerce_in")}($x, ${a[0]}, ${a[1]})", t)
+                    "coerceAtLeast" -> Expr("${use("kernelin_at_least")}($x, ${a[0]})", t)
+                    else -> Expr("${use("kernelin_at_most")}($x, ${a[0]})", t)
+                }
                 return when (name) {
                     "coerceIn" -> Expr("clamp($x, ${a[0]}, ${a[1]})", t)
                     "coerceAtLeast" -> Expr("max($x, ${a[0]})", t)
@@ -991,7 +1101,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             val high = expr(range.regularArgs()[0], pre)
             val t = if (WType.F32 in setOf(value.type, low.type, high.type)) WType.F32 else WType.I32
             var x = cast(value, t)
-            if (!x.matches(Regex("[A-Za-z_][A-Za-z0-9_.]*|-?[0-9.]+[if]?"))) {
+            if (!x.matches(SIMPLE_VALUE)) {
                 val tmp = names.allocate("kernelin_in", internal = true)
                 pre += "let $tmp: ${t.wgsl} = $x;"
                 x = tmp
@@ -1032,21 +1142,29 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 promote(expr(args[0], pre), expr(args[1], pre))
             }
             if (l.const is Number && r.const is Number) {
-                val a = (l.const as Number).toFloat().takeIf { l.type == WType.F32 }
-                val cmp = if (l.type == WType.F32 || r.type == WType.F32) {
-                    (l.const as Number).toFloat().compareTo((r.const as Number).toFloat()).takeUnless {
-                        (a?.isNaN() == true) || (r.const as? Float)?.isNaN() == true
+                // Operators compare floats the IEEE 754 way (-0f == 0f, NaN is unordered), unlike compareTo.
+                val folded = if (l.type == WType.F32 || r.type == WType.F32) {
+                    val a = (l.const as Number).toFloat()
+                    val b = (r.const as Number).toFloat()
+                    when (name) {
+                        "less" -> a < b
+                        "lessOrEqual" -> a <= b
+                        "greater" -> a > b
+                        "greaterOrEqual" -> a >= b
+                        "EQEQ", "EQEQEQ", "ieee754equals" -> a == b
+                        else -> null
                     }
                 } else {
-                    (l.const as Int).compareTo(r.const as Int)
-                }
-                val folded = when (name) {
-                    "less" -> cmp?.let { it < 0 } ?: false
-                    "lessOrEqual" -> cmp?.let { it <= 0 } ?: false
-                    "greater" -> cmp?.let { it > 0 } ?: false
-                    "greaterOrEqual" -> cmp?.let { it >= 0 } ?: false
-                    "EQEQ", "EQEQEQ", "ieee754equals" -> cmp?.let { it == 0 } ?: false
-                    else -> null
+                    val a = l.const as Int
+                    val b = r.const as Int
+                    when (name) {
+                        "less" -> a < b
+                        "lessOrEqual" -> a <= b
+                        "greater" -> a > b
+                        "greaterOrEqual" -> a >= b
+                        "EQEQ", "EQEQEQ", "ieee754equals" -> a == b
+                        else -> null
+                    }
                 }
                 if (folded != null) return lit(folded)
             }
@@ -1104,7 +1222,9 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 "toFloat" -> Expr(cast(receiver, resultType), resultType)
                 "compareTo" -> {
                     val (l, r) = promote(receiver, args[0])
-                    Expr("select(select(0i, 1i, ${l.code} > ${r.code}), -1i, ${l.code} < ${r.code})", WType.I32)
+                    // Float.compareTo is a total order: -0f < 0f, and NaN is above everything and equal to itself.
+                    if (l.type == WType.F32) Expr("${use("kernelin_compare")}(${l.code}, ${r.code})", WType.I32)
+                    else Expr("select(select(0i, 1i, ${l.code} > ${r.code}), -1i, ${l.code} < ${r.code})", WType.I32)
                 }
                 "equals" -> {
                     val (l, r) = promote(receiver, args[0])
@@ -1133,9 +1253,9 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             floatOnly[name]?.let { return Expr("$it(${f(0)})", WType.F32) }
             return when (name) {
                 "abs" -> Expr("abs(${t(0)})", resultType)
-                "sign" -> Expr("sign(${t(0)})", resultType)
-                "min" -> Expr("min(${t(0)}, ${t(1)})", resultType)
-                "max" -> Expr("max(${t(0)}, ${t(1)})", resultType)
+                "sign" -> if (resultType == WType.F32) Expr("${use("kernelin_sign")}(${t(0)})", resultType) else Expr("sign(${t(0)})", resultType)
+                "min" -> Expr("${if (resultType == WType.F32) use("kernelin_min") else "min"}(${t(0)}, ${t(1)})", resultType)
+                "max" -> Expr("${if (resultType == WType.F32) use("kernelin_max") else "max"}(${t(0)}, ${t(1)})", resultType)
                 "atan2" -> Expr("atan2(${f(0)}, ${f(1)})", WType.F32)
                 "pow" -> {
                     usesPow = true
@@ -1143,8 +1263,8 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                     usesSpecialFloats = true
                     Expr("kernelin_pow(${f(0)}, ${f(1)})", WType.F32)
                 }
-                "hypot" -> Expr("length(vec2<f32>(${f(0)}, ${f(1)}))", WType.F32)
-                "log10" -> Expr("(log(${f(0)}) * 0.4342944819f)", WType.F32)
+                "hypot" -> Expr("${use("kernelin_hypot")}(${f(0)}, ${f(1)})", WType.F32)
+                "log10" -> Expr("${use("kernelin_log10")}(${f(0)})", WType.F32)
                 else -> fail(call, "kotlin.math.$name isn't supported on the GPU yet")
             }
         }
@@ -1323,7 +1443,8 @@ private fun IrExpression.isIntLiteral(v: Int) = this is IrConst && value == v
 private fun IrExpression.isUnitValue(): Boolean =
     this is org.jetbrains.kotlin.ir.expressions.IrGetObjectValue && type.classFqName?.asString() == "kotlin.Unit"
 
-private fun String.isIntLiteral() = matches(Regex("-?\\d+i"))
+/** A name or a number literal: safe to repeat in an expression without a temporary. */
+private val SIMPLE_VALUE = Regex("[A-Za-z_][A-Za-z0-9_.]*|-?[0-9.]+[if]?")
 
 /** Gives every WGSL identifier a unique, legal name. */
 internal class NameAllocator {
@@ -1331,7 +1452,7 @@ internal class NameAllocator {
 
     /** [internal] names belong to Kernelin itself; user names never start with `kernelin`. */
     fun allocate(kotlinName: String, internal: Boolean = false): String {
-        var base = kotlinName.replace(Regex("[^A-Za-z0-9_]"), "_").trim('_').ifEmpty { "v" }
+        var base = kotlinName.replace(NOT_IDENTIFIER, "_").trim('_').ifEmpty { "v" }
         if (base[0].isDigit()) base = "v$base"
         if (base in WGSL_RESERVED || !internal && base.startsWith("kernelin")) base += "_k"
         var name = base
@@ -1341,6 +1462,8 @@ internal class NameAllocator {
     }
 
     private companion object {
+        val NOT_IDENTIFIER = Regex("[^A-Za-z0-9_]")
+
         val WGSL_RESERVED = setOf(
             // keywords and types
             "alias", "array", "atomic", "bitcast", "bool", "break", "case", "const", "const_assert", "continue",
@@ -1379,3 +1502,139 @@ internal class NameAllocator {
         )
     }
 }
+
+/**
+ * Kernelin's own WGSL functions for Kotlin semantics that WGSL leaves open. NaN is always checked on the bits
+ * (kernelin_is_nan), because GPU compilers may assume there are no NaNs and drop a plain `x != x`.
+ */
+private val RUNTIME_FUNCTIONS = mapOf(
+    // Kotlin's min/max (Java's Math.min/max): NaN if either side is NaN, and -0f is less than 0f.
+    "kernelin_min" to """
+        fn kernelin_min(a: f32, b: f32) -> f32 {
+          if (kernelin_is_nan(a) || kernelin_is_nan(b)) {
+            return bitcast<f32>(0x7fc00000u | kernelin_zero);
+          }
+          if (a == b) {
+            return bitcast<f32>(bitcast<u32>(a) | bitcast<u32>(b));
+          }
+          return select(b, a, a < b);
+        }
+    """,
+    "kernelin_max" to """
+        fn kernelin_max(a: f32, b: f32) -> f32 {
+          if (kernelin_is_nan(a) || kernelin_is_nan(b)) {
+            return bitcast<f32>(0x7fc00000u | kernelin_zero);
+          }
+          if (a == b) {
+            return bitcast<f32>(bitcast<u32>(a) & bitcast<u32>(b));
+          }
+          return select(b, a, a > b);
+        }
+    """,
+    // coerceIn/AtLeast/AtMost as Kotlin writes them: `if (x < min) min else if (x > max) max else x`, where a
+    // comparison with NaN is false (so a NaN value or bound changes nothing). Kotlin throws when min > max.
+    "kernelin_coerce_in" to """
+        fn kernelin_coerce_in(x: f32, lo: f32, hi: f32) -> f32 {
+          if (kernelin_is_nan(x)) {
+            return x;
+          }
+          if (!kernelin_is_nan(lo) && x < lo) {
+            return lo;
+          }
+          if (!kernelin_is_nan(hi) && x > hi) {
+            return hi;
+          }
+          return x;
+        }
+    """,
+    "kernelin_at_least" to """
+        fn kernelin_at_least(x: f32, lo: f32) -> f32 {
+          if (kernelin_is_nan(x) || kernelin_is_nan(lo)) {
+            return x;
+          }
+          return select(x, lo, x < lo);
+        }
+    """,
+    "kernelin_at_most" to """
+        fn kernelin_at_most(x: f32, hi: f32) -> f32 {
+          if (kernelin_is_nan(x) || kernelin_is_nan(hi)) {
+            return x;
+          }
+          return select(x, hi, x > hi);
+        }
+    """,
+    // Kotlin's sign (Java's Math.signum): NaN stays NaN and -0f stays -0f.
+    "kernelin_sign" to """
+        fn kernelin_sign(x: f32) -> f32 {
+          if (kernelin_is_nan(x) || (bitcast<u32>(x) & 0x7fffffffu) == 0u) {
+            return x;
+          }
+          return select(-1.0f, 1.0f, x > 0.0f);
+        }
+    """,
+    // Kotlin's hypot without overflow or underflow: length(vec2(x, y)) squares x and y, so it gave Infinity for
+    // 1e20f and 0 for 1e-25f. Scaling by the bigger side keeps the square near 1. Infinity wins over NaN, like Java.
+    "kernelin_hypot" to """
+        fn kernelin_hypot(x: f32, y: f32) -> f32 {
+          let a = abs(x);
+          let b = abs(y);
+          if (kernelin_is_inf(a) || kernelin_is_inf(b)) {
+            return bitcast<f32>(0x7f800000u | kernelin_zero);
+          }
+          if (kernelin_is_nan(a) || kernelin_is_nan(b)) {
+            return bitcast<f32>(0x7fc00000u | kernelin_zero);
+          }
+          let big = max(a, b);
+          if (big == 0.0f) {
+            return 0.0f;
+          }
+          let r = min(a, b) / big;
+          return big * sqrt(1.0f + r * r);
+        }
+    """,
+    // Kotlin's log10, accurate to a few ULPs. log(x) * log10(e) loses most digits near x = 1 (where WGSL's log
+    // has only an absolute error bound), so split x = m * 2^e with m in [0.707, 1.414) and compute
+    // ln(m) = 2 atanh((m - 1) / (m + 1)) as a short series; log10(2) is split in two so e * log10(2) is exact.
+    "kernelin_log10" to """
+        fn kernelin_log10(x: f32) -> f32 {
+          if (kernelin_is_nan(x) || x < 0.0f) {
+            return bitcast<f32>(0x7fc00000u | kernelin_zero);
+          }
+          if (x == 0.0f) {
+            return bitcast<f32>(0xff800000u | kernelin_zero);
+          }
+          if (kernelin_is_inf(x)) {
+            return x;
+          }
+          let parts = frexp(x);
+          var m = parts.fract;
+          var e = parts.exp;
+          if (m < 0.70710677f) {
+            m = m * 2.0f;
+            e = e - 1i;
+          }
+          let t = (m - 1.0f) / (m + 1.0f);
+          let t2 = t * t;
+          let ln_m = 2.0f * t * (1.0f + t2 * (0.33333334f + t2 * (0.2f + t2 * (0.14285715f + t2 * (0.11111111f + t2 * 0.09090909f)))));
+          let fe = f32(e);
+          return fe * 0.30102539f + (fe * 4.6050391e-6f + ln_m * 0.43429449f);
+        }
+    """,
+    // Float.compareTo (Java's Float.compare): a total order. Every NaN becomes the one NaN Java uses, then the
+    // bits of a negative float are flipped (except the sign), so comparing them as Ints gives the float order.
+    "kernelin_compare" to """
+        fn kernelin_float_order(x: f32) -> i32 {
+          var bits = bitcast<i32>(x);
+          if (kernelin_is_nan(x)) {
+            bits = 0x7fc00000i;
+          }
+          return bits ^ ((bits >> 31u) & 0x7fffffffi);
+        }
+
+        fn kernelin_compare(a: f32, b: f32) -> i32 {
+          let x = kernelin_float_order(a);
+          let y = kernelin_float_order(b);
+          return select(select(0i, 1i, x > y), -1i, x < y);
+        }
+    """,
+)

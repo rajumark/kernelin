@@ -8,7 +8,9 @@ import kotlin.random.Random
  * The generated code only uses operations whose results are exactly defined on both sides: Int arithmetic
  * (wrapping), bit operations with masked shift counts, division by a never-zero value, conversions through
  * Float only for values that are exactly representable, bounded loops, labeled jumps, `repeat`, `when`,
- * `in` ranges and helper functions. Any CPU/GPU difference is therefore a Kernelin bug.
+ * `in` ranges and helper functions. Float values are small whole numbers, NaN, infinities and -0f, read back
+ * with compareTo, so min/max/coerce/sign must follow Kotlin's rules for NaN and -0f exactly. Any CPU/GPU
+ * difference is therefore a Kernelin bug.
  */
 class KernelFuzzer(private val seed: Long) {
     private val r = Random(seed)
@@ -129,12 +131,18 @@ class KernelFuzzer(private val seed: Long) {
     private fun forLoop(depth: Int) {
         val label = fresh("L")
         val k = fresh("k")
-        val range = when (r.nextInt(5)) {
+        val range = when (r.nextInt(8)) {
             0 -> "0 until ${r.nextInt(0, 5)}"
             1 -> "0..${r.nextInt(0, 4)}"
             2 -> "${r.nextInt(2, 6)} downTo 0"
             3 -> "0 until ${r.nextInt(2, 9)} step ${r.nextInt(1, 4)}"
-            else -> "0..<${r.nextInt(1, 5)}"
+            4 -> "0..<${r.nextInt(1, 5)}"
+            // Ranges from data: a few elements long, or empty when the end wraps past Int.MAX_VALUE / MIN_VALUE.
+            5 -> intExpr(1).let { v -> "($v)${listOf("..", " until ").random(r)}(($v) + ${r.nextInt(0, 6)}) step ${step()}" }
+            6 -> intExpr(1).let { v -> "($v) downTo (($v) - ${r.nextInt(0, 6)}) step ${step()}" }
+            else -> r.nextInt(0, 6).let { c ->
+                if (r.nextBoolean()) "(Int.MAX_VALUE - $c)..Int.MAX_VALUE step ${step()}" else "(Int.MIN_VALUE + $c) downTo Int.MIN_VALUE step ${step()}"
+            }
         }
         loops.addLast(label)
         block("$label@ for ($k in $range)") {
@@ -143,6 +151,9 @@ class KernelFuzzer(private val seed: Long) {
         }
         loops.removeLast()
     }
+
+    /** A positive step (Kotlin throws for 0 or less): a constant, or from data. */
+    private fun step() = if (r.nextBoolean()) r.nextInt(1, 4).toString() else "((${intExpr(1)}) and 3) + 1"
 
     private fun whileLoop(depth: Int) {
         val w = fresh("w")
@@ -199,7 +210,7 @@ class KernelFuzzer(private val seed: Long) {
     private fun intExpr(depth: Int): String {
         if (depth <= 0 || r.nextInt(10) < 3) return intLeaf()
         val x = { intExpr(depth - 1) }
-        return when (r.nextInt(16)) {
+        return when (r.nextInt(17)) {
             0 -> "(${x()} + ${x()})"
             1 -> "(${x()} - ${x()})"
             2 -> "(${x()} * ${x()})"
@@ -216,7 +227,25 @@ class KernelFuzzer(private val seed: Long) {
             13 -> if (r.nextBoolean()) "abs(${x()})" else "${x()}.coerceIn(-1000, 1000)"
             // Through Float only with exactly representable values, so both sides must agree.
             14 -> "((${x()} and 65535).toFloat() / 4f).toInt()"
+            15 -> "${floatExpr(depth - 1)}.compareTo(${floatExpr(depth - 1)})"
             else -> helpers.randomOrNull(r)?.let { (h, n) -> "$h(${(0 until n).joinToString { x() }})" } ?: x()
+        }
+    }
+
+    /** A Float that is exact on both sides: a whole number up to 255, -0f, NaN or an infinity. */
+    private fun floatExpr(depth: Int): String {
+        val f = { floatExpr(depth - 1) }
+        return when (r.nextInt(if (depth <= 0) 3 else 9)) {
+            0 -> listOf("0f", "-0f", "1f", "-1f", "Float.NaN", "Float.POSITIVE_INFINITY", "Float.NEGATIVE_INFINITY").random(r)
+            1 -> "(${intExpr(1)} and 255).toFloat()"
+            2 -> "(-((${intExpr(1)} and 255).toFloat()))"
+            3 -> "min(${f()}, ${f()})"
+            4 -> "max(${f()}, ${f()})"
+            // Bounds in order (or NaN), as Kotlin throws when the minimum is above the maximum.
+            5 -> "${f()}.coerceIn(${listOf("-0f", "-5f", "Float.NaN").random(r)}, ${listOf("0f", "5f", "Float.NaN").random(r)})"
+            6 -> "${f()}.coerceAtLeast(${f()})"
+            7 -> "${f()}.coerceAtMost(${f()})"
+            else -> "sign(${f()})"
         }
     }
 

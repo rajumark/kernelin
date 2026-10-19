@@ -119,6 +119,58 @@ class FirCheckerTest {
     }
 
     @Test
+    fun `unsupported code in helpers called from a kernel is reported in the helper`() {
+        val c = compile(
+            """
+            fun label(x: Int): Float { val s = "n=" + x; return s.length.toFloat() }
+            fun twice(x: Float): Double = x * 2.0
+            fun inner(x: Float): Float { if (x < 0f) throw IllegalStateException(); return x }
+            fun outer(x: Float): Float = inner(x) + 1f
+            fun unused(x: Float): Float { val s = "fine on the CPU"; return x }
+            fun sum(a: FloatArray, n: Int): Float { var s = 0f; repeat(n) { s += a[it] }; return s }
+
+            @Kernel
+            fun k(out: FloatArray) {
+                val i = globalId()
+                out[i] = label(i) + outer(out[i]) + twice(1f).toFloat() + sum(out, 2)
+            }
+            """,
+        )
+        assertFalse(c.ok, c.output)
+        val text = c.errors.joinToString("\n")
+        assertContains(text, "strings aren't supported on the GPU (in helper 'label', called from @Kernel k)")
+        assertContains(text, "variable 's' has type String; only Int, Float and Boolean are supported (strings aren't supported on the GPU) (in helper 'label', called from @Kernel k)")
+        assertContains(text, "helper 'twice' returns Double; helpers must return Int, Float, Boolean or Unit (in helper 'twice', called from @Kernel k)")
+        assertContains(text, "throwing exceptions isn't supported on the GPU (in helper 'inner', called from @Kernel k)")
+        // The errors point at the helper's own code (line 4 of the file is `fun label`), not at the call.
+        assertContains(text, "Kernels.kt:4:")
+        assertFalse("unused" in text || "Kernels.kt:8:" in text, text)
+        assertFalse("'sum'" in text, text)
+    }
+
+    @Test
+    fun `helpers in another file are reported at the call in the kernel`() {
+        val c = KernelinCompiler.compileFiles(
+            mapOf(
+                "Helpers.kt" to "fun describe(x: Float): Float { println(x); return x }\nfun fine(x: Float): Float = x * 2f\n",
+                "Kernels.kt" to """
+                    import io.github.rajumark.kernelin.*
+
+                    @Kernel
+                    fun k(out: FloatArray) {
+                        val i = globalId()
+                        out[i] = describe(out[i]) + fine(out[i])
+                    }
+                """.trimIndent(),
+            ),
+        )
+        assertFalse(c.ok, c.output)
+        val error = c.errors.single()
+        assertContains(error, "Kernels.kt:6:")
+        assertContains(error, "'kotlin.io.println' can't run on the GPU (only kotlin.math, Int/Float operators and your own functions are supported) (in helper 'describe' in Helpers.kt, called from @Kernel k)")
+    }
+
+    @Test
     fun `errors point at the code to fix`() {
         val c = compile(
             """

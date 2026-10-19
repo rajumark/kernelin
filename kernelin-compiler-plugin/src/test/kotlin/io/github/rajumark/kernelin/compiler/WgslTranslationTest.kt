@@ -95,7 +95,7 @@ class WgslTranslationTest {
         assertContains(wgsl, "i32(arrayLength(&ints))")
         assertContains(wgsl, "continuing {")
         assertContains(wgsl, "select(")
-        assertContains(wgsl, "clamp(")
+        assertContains(wgsl, "kernelin_coerce_in(acc, 0.0f, 1.0f)")
         assertContains(wgsl, "continue;")
         assertContains(wgsl, "break;")
     }
@@ -237,6 +237,96 @@ class WgslTranslationTest {
     fun `constant integer division by zero is a compile error`() {
         val c = compileError("@Kernel\nfun k(out: IntArray) { out[globalId()] = 5 / 0 }")
         assertContains(c.errors.joinToString("\n"), "integer division by zero")
+    }
+
+    @Test
+    fun `for loops that could pass Int MAX_VALUE count their steps instead`() {
+        val c = compileOk(
+            """
+            @Kernel
+            fun k(out: IntArray, n: Int, s: Int) {
+                val i = globalId()
+                var x = 0
+                for (j in 0 until n) x += j
+                for (j in 0..n step s) x += j
+                for (j in n downTo -n step 2) x += j
+                for (j in 10 downTo 0 step 2) x += j
+                for (j in 0..Int.MAX_VALUE) { if (j > i) break; x += j }
+                out[i] = x
+            }
+            """,
+        )
+        val wgsl = c.wgsl("k")
+        // `0 until n` can't overflow: j < n <= Int.MAX_VALUE, so j + 1 fits.
+        assertContains(wgsl, "for (var j: i32 = 0i; j < kernelin_end; j = j + 1i)")
+        // The others count the steps left (unsigned, so even Int.MIN_VALUE..Int.MAX_VALUE fits) and skip the loop
+        // when the step is 0 or less (Kotlin throws there).
+        assertContains(wgsl, "if (kernelin_step > 0i && kernelin_first <= kernelin_end_1) {")
+        assertContains(wgsl, "var kernelin_left: u32 = (u32(kernelin_end_1) - u32(kernelin_first)) / u32(kernelin_step);")
+        assertContains(wgsl, "break if kernelin_left == 4294967295u;")
+        assertContains(wgsl, "j_1 = bitcast<i32>(bitcast<u32>(j_1) + bitcast<u32>(kernelin_step));")
+        assertContains(wgsl, "(u32(kernelin_first_1) - u32(kernelin_end_2)) / 2u")
+        assertContains(wgsl, "(u32(kernelin_end_4) - u32(kernelin_first_2)) / 1u")
+        // Constant ends that leave room for one more step keep the plain loop.
+        assertContains(wgsl, "for (var j_3: i32 = 10i; j_3 >= kernelin_end_3; j_3 = j_3 - 2i)")
+    }
+
+    @Test
+    fun `a constant step of zero or less and a second step are compile errors`() {
+        val text = compileError(
+            """
+            @Kernel
+            fun k(out: IntArray) {
+                for (j in 0..10 step 0) out[j] = 1
+                for (j in 10 downTo 0 step -2) out[j] = 1
+                for (j in 0..10 step 2 step 3) out[j] = 1
+            }
+            """,
+        ).errors.joinToString("\n")
+        assertContains(text, "step must be positive, but it is 0 (Kotlin throws IllegalArgumentException)")
+        assertContains(text, "step must be positive, but it is -2")
+        assertContains(text, "only one step per range is supported")
+    }
+
+    @Test
+    fun `Float min, max, coerce, sign and compareTo follow Kotlin for NaN and -0f`() {
+        val c = compileOk(
+            """
+            @Kernel
+            fun k(a: FloatArray, out: FloatArray, ints: IntArray) {
+                val i = globalId()
+                out[i] = min(a[i], 1f) + max(a[i], 1f) + a[i].coerceIn(0f, 1f) + sign(a[i]) + min(-0f, 0f)
+                ints[i] = a[i].compareTo(1f) + (if (-0f < 0f) 10 else 20) + (-0f).compareTo(0f) * 100
+            }
+            """,
+        )
+        val wgsl = c.wgsl("k")
+        assertContains(wgsl, "kernelin_min(a[i], 1.0f)")
+        assertContains(wgsl, "kernelin_max(a[i], 1.0f)")
+        assertContains(wgsl, "kernelin_coerce_in(a[i], 0.0f, 1.0f)")
+        assertContains(wgsl, "kernelin_sign(a[i])")
+        assertContains(wgsl, "kernelin_compare(a[i], 1.0f)")
+        // Constants too: min(-0f, 0f) is -0f, `-0f < 0f` is false, but (-0f).compareTo(0f) is -1.
+        assertContains(wgsl, "+ -0.0f);")
+        assertContains(wgsl, "ints[i] = ((kernelin_compare(a[i], 1.0f) + 20i) + -100i);")
+    }
+
+    @Test
+    fun `the manifest is valid JSON for any kernel name`() {
+        // Backticks allow quotes and spaces in a Kotlin name; the manifest used to put them in unescaped.
+        val c = compileOk(
+            """
+            @Kernel
+            fun `say "hi" twice`(`the out`: FloatArray, n: Int) {
+                `the out`[globalId()] = n.toFloat()
+            }
+            """,
+        )
+        val json = c.manifest("say \"hi\" twice")
+        assertContains(json, "\"kernel\": \"say \\\"hi\\\" twice\"")
+        val manifest = io.github.rajumark.kernelin.KernelManifest.parse(json)
+        assertEquals("say \"hi\" twice", manifest.kernel)
+        assertEquals(listOf("the_out", "n"), manifest.params.map { it.name })
     }
 
     @Test

@@ -76,8 +76,15 @@ object GpuDifferential {
         val cpu = manifest.params.withIndex()
             .filter { (_, p) -> p.isWritten }
             .associate { (i, p) -> p.name to cpuArgs[i] }
+        return Result(cpu, runGpu(c, kernel, size, args))
+    }
 
-        // GPU: the generated WGSL through WebGPU.
+    /**
+     * Runs one kernel of [c] on the GPU only and returns its written buffers. For behavior where Kotlin throws
+     * (so there is no CPU result to compare with), like a for loop with `step 0`.
+     */
+    fun runGpu(c: Compilation, kernel: String, size: Int, args: Map<String, Any>): Map<String, Any> {
+        val manifest = KernelManifest.parse(c.manifest(kernel))
         val dir = Files.createTempDirectory("kernelin-gpu").toFile()
         val wgsl = dir.resolve("kernel.wgsl").apply { writeText(c.wgsl(kernel)) }
         val manifestFile = dir.resolve("kernel.json").apply { writeText(c.manifest(kernel)) }
@@ -97,12 +104,13 @@ object GpuDifferential {
             val raw = ByteBuffer.wrap(dir.resolve("${p.name}.out.bin").readBytes()).order(ByteOrder.LITTLE_ENDIAN)
             p.name to if (p.type == "i32") IntArray(raw.remaining() / 4) { raw.getInt() } else FloatArray(raw.remaining() / 4) { raw.getFloat() }
         }
-        return Result(cpu, gpu)
+        return gpu
     }
 
     /**
      * Runs and asserts CPU == GPU. Floats may differ by `absTol + relTol * |cpu|`; up to [mismatchFraction] of
      * elements may differ beyond that (for chaotic float math like Mandelbrot, where GPUs fuse multiply-adds).
+     * With [exactFloats], floats must have the same bits (so -0f and 0f differ); any NaN still equals any NaN.
      */
     fun assertSame(
         source: String,
@@ -112,7 +120,8 @@ object GpuDifferential {
         absTol: Double = 1e-6,
         relTol: Double = 1e-5,
         mismatchFraction: Double = 0.0,
-    ): Result = assertSame(compile(source), kernel, size, args, absTol, relTol, mismatchFraction)
+        exactFloats: Boolean = false,
+    ): Result = assertSame(compile(source), kernel, size, args, absTol, relTol, mismatchFraction, exactFloats)
 
     /** Like [assertSame] for a kernel of an already compiled [c]. */
     fun assertSame(
@@ -123,6 +132,7 @@ object GpuDifferential {
         absTol: Double = 1e-6,
         relTol: Double = 1e-5,
         mismatchFraction: Double = 0.0,
+        exactFloats: Boolean = false,
     ): Result {
         val r = run(c, kernel, size, args)
         for ((name, cpuValue) in r.cpu) {
@@ -136,14 +146,16 @@ object GpuDifferential {
                     is FloatArray -> {
                         val a = cpuValue[i]
                         val b = (gpuValue as FloatArray)[i]
-                        (a.isNaN() && b.isNaN()) || a == b || abs(a - b) <= absTol + relTol * abs(a)
+                        if (exactFloats) (a.isNaN() && b.isNaN()) || a.toRawBits() == b.toRawBits()
+                        else (a.isNaN() && b.isNaN()) || a == b || abs(a - b) <= absTol + relTol * abs(a)
                     }
                     else -> error("unexpected $cpuValue")
                 }
                 if (!ok) {
                     bad++
                     if (examples.size < 8) {
-                        examples += "[$i] cpu=${elementAt(cpuValue, i)} gpu=${elementAt(gpuValue, i)}"
+                        examples += "[$i] cpu=${elementAt(cpuValue, i)} gpu=${elementAt(gpuValue, i)}" +
+                            (inputs(args, i).takeIf { it.isNotEmpty() }?.let { " inputs: $it" } ?: "")
                     }
                 }
             }
@@ -154,6 +166,11 @@ object GpuDifferential {
         }
         return r
     }
+
+    /** Element [i] of every input array, to show which inputs gave a mismatch. */
+    private fun inputs(args: Map<String, Any>, i: Int): String = args.entries
+        .filter { (_, v) -> (v is IntArray || v is FloatArray) && i < length(v) }
+        .joinToString(", ") { (k, v) -> "$k=${elementAt(v, i)}" }
 
     private fun runDeno(deno: File, args: List<String>): Pair<Int, String> {
         val cmd = listOf(deno.path, "run", "--quiet", "--unstable-webgpu", "--allow-read", "--allow-write", "--allow-env", script.path) + args
