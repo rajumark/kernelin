@@ -374,6 +374,10 @@ class GpuDifferentialTest {
             for (j in Int.MIN_VALUE + 5 downTo Int.MIN_VALUE) { n++; if (n > 40) break }
             for (j in 0..Int.MAX_VALUE) { n++; if (n > 50) break }
             for (j in Int.MAX_VALUE - 9 until Int.MAX_VALUE step 4) { n += 100 }
+            // Constant ranges of 2^31 and 2^32 values: these crashed lavapipe's shader compiler (SIGFPE).
+            for (j in Int.MIN_VALUE..0) { n += 1000; if (n > 60000) break }
+            for (j in Int.MIN_VALUE..Int.MAX_VALUE) { n += 1000; if (n > 120000) break }
+            for (j in Int.MAX_VALUE downTo Int.MIN_VALUE) { n += 1000; if (n > 180000) break }
             fixed[i] = n
         }
     """

@@ -792,7 +792,9 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                     range.inclusive -> "$first <= $end"
                     else -> "$first < $end"
                 }
-                val left = names.allocate("kernelin_left", internal = true)
+                val last = names.allocate("kernelin_last", internal = true)
+                val count = names.allocate("kernelin_count", internal = true)
+                val done = names.allocate("kernelin_done", internal = true)
                 // Distance from the first to the last value as u32: it fits even for Int.MIN_VALUE..Int.MAX_VALUE.
                 val distance = when {
                     range.descending -> "(u32($first) - u32($end))"
@@ -802,15 +804,22 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 val bits = "bitcast<u32>($step)"
                 block(if (stepConst == null) "if ($step > 0i && $nonEmpty)" else "if ($nonEmpty)") {
                     line("var $i: i32 = $first;")
-                    line("var $left: u32 = $distance / $stepU;")
+                    line("let $last: u32 = $distance / $stepU;")
+                    line("var $count: u32 = 0u;")
+                    line("var $done: bool = false;")
                     loop(whileLoop) {
                         block("loop") {
                             body()
                             block("continuing") {
                                 // Wraps only after the last iteration, when the value is no longer used.
                                 line("$i = bitcast<i32>(bitcast<u32>($i) ${if (range.descending) "-" else "+"} $bits);")
-                                line("$left = $left - 1u;")
-                                line("break if $left == 4294967295u;")
+                                // Count up and compare before adding: a counter that counts down to a wrap made
+                                // Mesa's loop analysis divide INT_MIN by -1 at shader compile time (SIGFPE in
+                                // lavapipe for constant ranges like 0..Int.MAX_VALUE). [done] is declared outside:
+                                // naga's Metal output got a `let` inside `continuing` wrong.
+                                line("$done = $count == $last;")
+                                line("$count = $count + 1u;")
+                                line("break if $done;")
                             }
                         }
                     }

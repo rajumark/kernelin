@@ -259,11 +259,14 @@ class WgslTranslationTest {
         val wgsl = c.wgsl("k")
         // `0 until n` can't overflow: j < n <= Int.MAX_VALUE, so j + 1 fits.
         assertContains(wgsl, "for (var j: i32 = 0i; j < kernelin_end; j = j + 1i)")
-        // The others count the steps left (unsigned, so even Int.MIN_VALUE..Int.MAX_VALUE fits) and skip the loop
-        // when the step is 0 or less (Kotlin throws there).
+        // The others count their steps (unsigned, so even Int.MIN_VALUE..Int.MAX_VALUE fits) and skip the loop
+        // when the step is 0 or less (Kotlin throws there). The counter counts up and is compared before it grows:
+        // counting down to a wrap crashed lavapipe's shader compiler (SIGFPE) for constant ranges.
         assertContains(wgsl, "if (kernelin_step > 0i && kernelin_first <= kernelin_end_1) {")
-        assertContains(wgsl, "var kernelin_left: u32 = (u32(kernelin_end_1) - u32(kernelin_first)) / u32(kernelin_step);")
-        assertContains(wgsl, "break if kernelin_left == 4294967295u;")
+        assertContains(wgsl, "let kernelin_last: u32 = (u32(kernelin_end_1) - u32(kernelin_first)) / u32(kernelin_step);")
+        assertContains(wgsl, "kernelin_done = kernelin_count == kernelin_last;")
+        assertContains(wgsl, "kernelin_count = kernelin_count + 1u;\n          break if kernelin_done;")
+        assertTrue("4294967295u" !in wgsl, "no counter that counts down to a wrap")
         assertContains(wgsl, "j_1 = bitcast<i32>(bitcast<u32>(j_1) + bitcast<u32>(kernelin_step));")
         assertContains(wgsl, "(u32(kernelin_first_1) - u32(kernelin_end_2)) / 2u")
         assertContains(wgsl, "(u32(kernelin_end_4) - u32(kernelin_first_2)) / 1u")

@@ -99,7 +99,7 @@ object GpuDifferential {
                 "\"scalars\": { $scalars },\n\"buffers\": { $buffers } }")
         }
         val (exit, out) = runDeno(deno!!, listOf(job.path))
-        if (exit != 0) fail("GPU run failed: $out\n--- shader ---\n${c.wgsl(kernel)}")
+        if (exit != 0) fail("GPU run failed (exit code $exit${if (exit > 128) ", killed by signal ${exit - 128}" else ""}): $out\n--- shader ---\n${c.wgsl(kernel)}")
         val gpu = manifest.buffers.filter { it.isWritten }.associate { p ->
             val raw = ByteBuffer.wrap(dir.resolve("${p.name}.out.bin").readBytes()).order(ByteOrder.LITTLE_ENDIAN)
             p.name to if (p.type == "i32") IntArray(raw.remaining() / 4) { raw.getInt() } else FloatArray(raw.remaining() / 4) { raw.getFloat() }
