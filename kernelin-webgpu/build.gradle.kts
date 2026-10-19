@@ -16,12 +16,18 @@ kotlin {
         browser {
             testTask { enabled = false }
         }
+        // Host tests run in Node against a small in-memory fake of WebGPU, so they need no GPU or browser.
+        nodejs()
     }
 
     sourceSets {
         wasmJsMain.dependencies {
             api(project(":kernelin-runtime"))
             api(libs.kotlinx.coroutines.core)
+        }
+        wasmJsTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

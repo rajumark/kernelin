@@ -190,6 +190,24 @@ class WgslTranslationTest {
     }
 
     @Test
+    fun `pow never calls WGSL pow with a negative or zero base`() {
+        // WGSL (and Vulkan) leave pow(x, y) undefined for x < 0 and for x == 0, y <= 0; Kotlin defines both.
+        val c = compileOk(
+            """
+            @Kernel
+            fun k(a: FloatArray, b: FloatArray, out: FloatArray) {
+                val i = globalId()
+                out[i] = a[i].pow(b[i]) + a[i].pow(2)
+            }
+            """,
+        )
+        val wgsl = c.wgsl("k")
+        assertContains(wgsl, "out[i] = (kernelin_pow(a[i], b[i]) + kernelin_pow(a[i], f32(2i)));")
+        assertContains(wgsl, "fn kernelin_pow(x: f32, y: f32) -> f32 {")
+        assertContains(wgsl, "pow(abs(x), y)")
+    }
+
+    @Test
     fun `constant integer division by zero is a compile error`() {
         val c = compileError("@Kernel\nfun k(out: IntArray) { out[globalId()] = 5 / 0 }")
         assertContains(c.errors.joinToString("\n"), "integer division by zero")

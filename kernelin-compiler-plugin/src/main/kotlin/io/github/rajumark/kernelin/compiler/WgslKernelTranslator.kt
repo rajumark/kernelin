@@ -117,8 +117,16 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
     private val helperStack = ArrayDeque<IrSimpleFunction>()
     private var usesFloatToInt = false
     private var usesFloatChecks = false
+    private var usesPow = false
 
-    private class Helper(val name: String, var code: String = "")
+    /**
+     * Counts emitted side effects: array writes, and calls to helpers that write arrays. Comparing it before and
+     * after translating an expression tells whether that expression has side effects.
+     */
+    private var sideEffects = 0
+
+    /** [writes] is true when the helper (or a helper it calls) writes to an array. */
+    private class Helper(val name: String, var code: String = "", var writes: Boolean = false)
 
     /** A helper that takes arrays is generated once per distinct set of kernel buffers passed to it. */
     private data class HelperKey(val function: IrSimpleFunction, val arrays: List<BufferParam>)
@@ -252,6 +260,33 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 appendLine("    return i32(-2147483647) - 1i;")
                 appendLine("  }")
                 appendLine("  return i32(x);")
+                appendLine("}")
+            }
+            if (usesPow) {
+                // Kotlin's Float.pow (Java's Math.pow). WGSL's pow is undefined for x < 0 and for x == 0, y <= 0,
+                // so only |x| > 0 goes to it and the sign and the special cases are handled here.
+                appendLine()
+                appendLine("fn kernelin_pow(x: f32, y: f32) -> f32 {")
+                appendLine("  if (y == 0.0f) {")
+                appendLine("    return 1.0f;")
+                appendLine("  }")
+                appendLine("  if (kernelin_is_nan(x) || kernelin_is_nan(y)) {")
+                appendLine("    return bitcast<f32>(0x7fc00000u | kernelin_zero);")
+                appendLine("  }")
+                appendLine("  var r: f32;")
+                appendLine("  if (x == 0.0f) {")
+                appendLine("    r = select(0.0f, bitcast<f32>(0x7f800000u | kernelin_zero), y < 0.0f);")
+                appendLine("  } else {")
+                appendLine("    r = pow(abs(x), y);")
+                appendLine("  }")
+                appendLine("  if (x < 0.0f && trunc(y) != y) {")
+                appendLine("    return bitcast<f32>(0x7fc00000u | kernelin_zero);")
+                appendLine("  }")
+                appendLine("  // A negative base (or -0) with an odd integer exponent keeps its sign; floats of 2^24 and more are even.")
+                appendLine("  if ((bitcast<u32>(x) & 0x80000000u) != 0u && fract(abs(y) * 0.5f) == 0.5f) {")
+                appendLine("    r = -r;")
+                appendLine("  }")
+                appendLine("  return r;")
                 appendLine("}")
             }
             for (h in helpers.values) {
@@ -494,6 +529,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 val pre = mutableListOf<String>()
                 val buffer = arrayBuffer(call.receiver()!!) ?: return run { fail(call, "arrays must be kernel parameters") }
                 buffer.written = true
+                sideEffects++
                 val index = expr(call.regularArgs()[0], pre)
                 val target = "${buffer.name}[${cast(index, WType.I32)}]"
                 val compound = compoundOperand(call.regularArgs()[1]) { get ->
@@ -791,32 +827,52 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             val b = w.branches
             if (w.origin == IrStatementOrigin.ANDAND && b.size == 2) {
                 // a && b  ==  if (a) b else false
-                val l = expr(b[0].condition, pre)
-                val r = expr(b[0].result, pre)
-                if (l.const == false) return lit(false)
-                if (l.const == true) return r
-                if (r.const != null && l.const != null) return lit((l.const as Boolean) && (r.const as Boolean))
-                return Expr("(${cast(l, WType.BOOL)} && ${cast(r, WType.BOOL)})", WType.BOOL)
+                return shortCircuit(b[0].condition, b[0].result, isAnd = true, pre)
             }
             if (w.origin == IrStatementOrigin.OROR && b.size == 2) {
                 // a || b  ==  if (a) true else b
-                val l = expr(b[0].condition, pre)
-                val r = expr(b[1].result, pre)
-                if (l.const == true) return lit(true)
-                if (l.const == false) return r
-                return Expr("(${cast(l, WType.BOOL)} || ${cast(r, WType.BOOL)})", WType.BOOL)
+                return shortCircuit(b[0].condition, b[1].result, isAnd = false, pre)
             }
             val type = scalarType(w.type)
             if (type == null || type == WType.UNIT) return fail(w, "this if/when must produce an Int, Float or Boolean value")
             val elseBranch = b.lastOrNull()?.takeIf { it is IrElseBranch || it.condition.isTrueConst() }
                 ?: return fail(w, "an if/when used as a value needs an else branch")
-            // Both sides of select() are evaluated, which is fine because kernel expressions have no side effects.
-            val elseValue = expr(elseBranch.result, pre)
-            var result = cast(elseValue, type)
-            var resultConst: Any? = elseValue.const.takeIf { elseValue.type == type }
-            for (branch in b.dropLast(1).asReversed()) {
-                val cond = expr(branch.condition, pre)
-                val value = expr(branch.result, pre)
+            val branches = b.dropLast(1)
+            if (branches.isEmpty()) return expr(elseBranch.result, pre)
+            // The first condition always runs; everything else runs only when Kotlin would run it.
+            val conds = listOf(Part(emptyList(), expr(branches[0].condition, pre), false)) +
+                branches.drop(1).map { part(it.condition) }
+            val values = branches.map { part(it.result) }
+            val elseValue = part(elseBranch.result)
+            val conditional = conds.drop(1) + values + elseValue
+            if (conditional.any { it.pre.isNotEmpty() || it.sideEffects }) {
+                // select() evaluates every side, so a branch with setup statements or side effects (a helper that
+                // writes an array) becomes a real if/else that assigns a temporary.
+                val tmp = names.allocate("kernelin_value", internal = true)
+                pre += "var $tmp: ${type.wgsl};"
+                fun emit(k: Int, indent: String) {
+                    if (k == branches.size) {
+                        elseValue.pre.forEach { pre += indent + it }
+                        pre += "$indent$tmp = ${cast(elseValue.value, type)};"
+                        return
+                    }
+                    conds[k].pre.forEach { pre += indent + it }
+                    pre += "${indent}if (${cast(conds[k].value, WType.BOOL)}) {"
+                    values[k].pre.forEach { pre += "$indent  $it" }
+                    pre += "$indent  $tmp = ${cast(values[k].value, type)};"
+                    pre += "$indent} else {"
+                    emit(k + 1, "$indent  ")
+                    pre += "$indent}"
+                }
+                emit(0, "")
+                return Expr(tmp, type)
+            }
+            // Plain values: one select() chain, which is cheaper on the GPU than branching.
+            var result = cast(elseValue.value, type)
+            var resultConst: Any? = elseValue.value.const.takeIf { elseValue.value.type == type }
+            for (k in branches.indices.reversed()) {
+                val cond = conds[k].value
+                val value = values[k].value
                 when (cond.const) {
                     true -> { result = cast(value, type); resultConst = value.const.takeIf { value.type == type } }
                     false -> Unit
@@ -824,6 +880,37 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 }
             }
             return resultConst?.let(::lit) ?: Expr(result, type)
+        }
+
+        /** A translated expression with its own setup statements, and whether it has side effects. */
+        private inner class Part(val pre: List<String>, val value: Expr, val sideEffects: Boolean)
+
+        private fun part(e: IrExpression): Part {
+            val pre = mutableListOf<String>()
+            val before = sideEffects
+            val value = expr(e, pre)
+            return Part(pre, value, sideEffects != before)
+        }
+
+        /**
+         * `l && r` / `l || r`. WGSL's && and || skip the right side too, but setup statements for it can't go
+         * inside the expression, so then the right side moves into an if.
+         */
+        private fun shortCircuit(left: IrExpression, right: IrExpression, isAnd: Boolean, pre: MutableList<String>): Expr {
+            val l = expr(left, pre)
+            val r = part(right)
+            if (l.const == !isAnd) return lit(!isAnd)
+            if (l.const == isAnd) return r.value.also { pre += r.pre }
+            if (r.pre.isEmpty()) {
+                return Expr("(${cast(l, WType.BOOL)} ${if (isAnd) "&&" else "||"} ${cast(r.value, WType.BOOL)})", WType.BOOL)
+            }
+            val tmp = names.allocate(if (isAnd) "kernelin_and" else "kernelin_or", internal = true)
+            pre += "var $tmp: bool = ${cast(l, WType.BOOL)};"
+            pre += if (isAnd) "if ($tmp) {" else "if (!$tmp) {"
+            r.pre.forEach { pre += "  $it" }
+            pre += "  $tmp = ${cast(r.value, WType.BOOL)};"
+            pre += "}"
+            return Expr(tmp, WType.BOOL)
         }
 
         private fun call(call: IrCall, pre: MutableList<String>): Expr {
@@ -1050,7 +1137,12 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 "min" -> Expr("min(${t(0)}, ${t(1)})", resultType)
                 "max" -> Expr("max(${t(0)}, ${t(1)})", resultType)
                 "atan2" -> Expr("atan2(${f(0)}, ${f(1)})", WType.F32)
-                "pow" -> Expr("pow(${f(0)}, ${f(1)})", WType.F32)
+                "pow" -> {
+                    usesPow = true
+                    usesFloatChecks = true
+                    usesSpecialFloats = true
+                    Expr("kernelin_pow(${f(0)}, ${f(1)})", WType.F32)
+                }
                 "hypot" -> Expr("length(vec2<f32>(${f(0)}, ${f(1)}))", WType.F32)
                 "log10" -> Expr("(log(${f(0)}) * 0.4342944819f)", WType.F32)
                 else -> fail(call, "kotlin.math.$name isn't supported on the GPU yet")
@@ -1105,6 +1197,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             }
             val key: Any = if (arrays.isEmpty()) fn else HelperKey(fn, arrays.values.toList())
             val helper = helpers[key] ?: translateHelper(call, fn, key, arrays) ?: return Expr("0", scalarType(call.type) ?: WType.I32)
+            if (helper.writes) sideEffects++
             val args = fn.parameters.mapIndexedNotNull { i, p ->
                 if (i in arrays) return@mapIndexedNotNull null
                 val arg = call.arguments[i] ?: return fail(call, "default arguments aren't supported in kernel helpers yet")
@@ -1141,7 +1234,9 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 translator.bindParameter(p, pname, paramTypes[i]!!)
                 "$pname: ${paramTypes[i]!!.wgsl}"
             }
+            val effectsBefore = sideEffects
             val body = translator.translate()
+            helper.writes = sideEffects != effectsBefore
             helperStack.removeLast()
             val ret = if (returnType == WType.UNIT) "" else " -> ${returnType!!.wgsl}"
             helper.code = "fn ${helper.name}(${paramDecls.joinToString(", ")})$ret {\n$body}\n"

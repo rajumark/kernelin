@@ -286,4 +286,69 @@ class GpuDifferentialTest {
         // GPUs may fuse multiply-adds, so a few pixels on the set's edge take a different number of steps.
         mismatchFraction = 0.01,
     ).let { }
+
+    // A helper that writes an array and returns a value. Calls to it must run only where Kotlin runs them.
+    private val countingHelper = """
+        fun count(hits: IntArray, i: Int, by: Int): Int { hits[i] += by; return by }
+    """
+
+    @Test
+    fun `if and when values run a writing helper only in the taken branch`() = GpuDifferential.assertSame(
+        countingHelper + """
+        @Kernel
+        fun k(a: IntArray, out: IntArray, hits: IntArray) {
+            val i = globalId()
+            val x = a[i]
+            val v = if (x > 0) count(hits, i, 1) else count(hits, i, 10)
+            val w = when {
+                x > 500 -> count(hits, i, 100)
+                x > -500 -> count(hits, i, 1000) + 1
+                else -> 7
+            }
+            val u = if (x % 2 == 0) { val t = count(hits, i, 10000); t * 2 } else 3
+            out[i] = v + w + u
+        }
+        """,
+        "k", n, mapOf("a" to ints(n, 13), "out" to IntArray(n), "hits" to IntArray(n)),
+    ).let { }
+
+    @Test
+    fun `and and or skip a writing helper on the right like Kotlin`() = GpuDifferential.assertSame(
+        countingHelper + """
+        @Kernel
+        fun k(a: IntArray, out: IntArray, hits: IntArray) {
+            val i = globalId()
+            val x = a[i]
+            var r = 0
+            // count(...) in 0..5 needs a temporary, which used to be computed before the && even when x <= 0.
+            if (x > 0 && count(hits, i, 1) in 0..5) r += 1
+            if (x > 300 || count(hits, i, 10) !in 0..5) r += 2
+            val both = x < -300 && count(hits, i, 100) in 0..1000
+            if (both) r += 4
+            out[i] = r
+        }
+        """,
+        "k", n, mapOf("a" to ints(n, 14), "out" to IntArray(n), "hits" to IntArray(n)),
+    ).let { }
+
+    @Test
+    fun `pow with a negative base matches Kotlin`() {
+        // Bases in -10..10 (including negatives and zero) with integer and fractional exponents.
+        val r = Random(15)
+        val base = FloatArray(n) { if (it % 17 == 0) 0f else (r.nextFloat() * 2f - 1f) * 10f }
+        val exps = floatArrayOf(0f, 1f, 2f, 3f, -1f, -2f, 0.5f, 1.5f, -0.5f)
+        val exp = FloatArray(n) { exps[it % exps.size] }
+        GpuDifferential.assertSame(
+            """
+            @Kernel
+            fun k(a: FloatArray, b: FloatArray, out: FloatArray, outInt: FloatArray) {
+                val i = globalId()
+                out[i] = a[i].pow(b[i])
+                outInt[i] = a[i].pow(3) + a[i].pow(2)
+            }
+            """,
+            "k", n, mapOf("a" to base, "b" to exp, "out" to FloatArray(n), "outInt" to FloatArray(n)),
+            absTol = 1e-4, relTol = 1e-4,
+        )
+    }
 }

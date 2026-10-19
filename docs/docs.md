@@ -338,7 +338,11 @@ suspend fun runSaxpy(x: FloatArray, y: FloatArray): FloatArray {
 - `size` is the number of threads (usually the length of the output array).
 - `scalars` must contain **every** `Int` and `Float` parameter by its Kotlin name (and `Boolean`, since 0.2.0; the type is `Map<String, Any>`, source compatible with 0.1.0, but Wasm libraries built against 0.1.0 that call `run()` need a recompile).
 - `buffers` must contain **every** array parameter by its Kotlin name.
-- Use `GpuData.empty(n)` for pure outputs, so nothing is uploaded.
+- `run` checks the arguments before anything reaches the GPU: an unknown name, an `Int` parameter given a `Float`
+  (or any other wrong scalar type), and `FloatArray` data for an `IntArray` parameter (or the other way round) throw
+  `IllegalArgumentException` (unreleased; before, they were silently ignored or reinterpreted).
+- Use `GpuData.empty(n)` for pure outputs, so nothing is uploaded. It starts from zeros on every run (unreleased;
+  before, a second run of the same size kept the previous run's values).
 - Only arrays the kernel writes (`read_write`) are copied back. Read them with `result.floats(name)` or `result.ints(name)`.
 - `result.millis` is the time from upload until the results are back.
 
@@ -355,6 +359,7 @@ The same kernel gives the same results on the CPU and the GPU, with these known 
 | Case | On the CPU (Kotlin) | On the GPU (WGSL) |
 |---|---|---|
 | Float rounding in `sin`, `exp`, `pow`, … | IEEE 754 double-backed results | 32-bit, may differ in the last bits. Compare with a tolerance |
+| `pow` with a negative or zero base | `(-2f).pow(3f) == -8f`, `(-2f).pow(0.5f)` is NaN | **Same as Kotlin** (unreleased). WGSL leaves these undefined, so 0.2.0 and older may return NaN on Vulkan GPUs |
 | Float division by zero (`x / 0f`) | `Infinity` or `NaN` | **Not guaranteed.** WGSL leaves it undefined; some GPUs (for example llvmpipe, used in CI) return an ordinary number. Check the divisor yourself |
 | `Infinity` / `NaN` that arrive in a buffer | Normal Kotlin behaviour | **Same as Kotlin** (since 0.2.0): `isNaN()`, `isInfinite()`, `isFinite()` and `toInt()` check the raw bits |
 | `Float.toInt()` on NaN or out-of-range values | NaN → 0, saturates at `Int.MIN_VALUE` / `Int.MAX_VALUE` | **Same as Kotlin** (since 0.2.0). On 0.1.0 the result is GPU-specific |
@@ -496,7 +501,7 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | Factory | Description |
 |---|---|
 | `GpuData.of(FloatArray)` / `GpuData.of(IntArray)` | Upload these values |
-| `GpuData.empty(length)` | Output only, nothing uploaded |
+| `GpuData.empty(length)` | Output only, nothing uploaded; zero-filled on every run |
 | `GpuData.ofJs(typedArray)` | Wrap an existing JS typed array without copying |
 
 ### `GpuResult`
@@ -647,6 +652,10 @@ gradle :samples:exportDemo                     # rebuild the live demo into docs
 **`WebGPU is not available in this browser`** — Use a recent Chrome, Edge or Safari, or enable WebGPU in Firefox. Check `WebGpu.isSupported` before calling `create()`.
 
 **`Missing scalar parameter` / `Missing buffer parameter`** — `run` needs every parameter by its exact Kotlin name.
+
+**`Unknown scalar parameter` / `Unknown buffer parameter`** — A name in `scalars` or `buffers` isn't a parameter of the kernel (often a typo). The message lists the real names.
+
+**`Scalar parameter 'x' is Int, but got Float` / `Buffer parameter 'x' is IntArray, but got FloatArray data`** — Pass values of the parameter's Kotlin type, e.g. `GpuData.of(IntArray)` for an `IntArray` parameter.
 
 **GPU and CPU results differ slightly** — GPUs use 32-bit floats with slightly different rounding for some math functions. Compare floats with a tolerance. See [Differences between CPU and GPU](#differences-between-cpu-and-gpu), especially division by zero.
 

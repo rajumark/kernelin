@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+Fixes (the GPU now matches Kotlin in all of these):
+- An `if` / `when` used as a value ran every branch on the GPU (it became `select()`), so a helper that writes an
+  array ran even in branches Kotlin skips. Branches with side effects or setup code now become a real `if`.
+- `a && b` / `a || b`: setup code for `b` (for example a temporary for `helper(...) in 0..5`) ran even when `a`
+  already decided the result. It now runs only when Kotlin evaluates `b`.
+- `Float.pow` with a negative base (`(-2f).pow(3f) == -8f`) or a zero base: WGSL leaves these undefined, and
+  Vulkan GPUs return NaN. Kernelin now handles the sign and the special cases itself, like Kotlin.
+
+WebGPU host:
+- `GpuData.empty(n)` is zero-filled on every run, as documented. Before, a run that reused the GPU buffer of an
+  earlier run of the same size started from that run's results.
+- `GpuKernel.run` rejects unknown parameter names, scalars of the wrong type (a `Float` for an `Int`) and
+  buffer data of the wrong type (`FloatArray` for an `IntArray`) with a clear `IllegalArgumentException`,
+  before anything reaches the GPU. Before, they were ignored, truncated or reinterpreted bit by bit.
+
 ## 0.2.0 (2026-10-16)
 
 IDE support:

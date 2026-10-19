@@ -39,21 +39,25 @@ public class WebGpu private constructor(internal val device: JsAny, public val d
     }
 }
 
-/** Input/output data for one kernel buffer. */
-public class GpuData private constructor(internal val js: JsAny?, internal val length: Int, internal val isInt: Boolean) {
+/**
+ * Input/output data for one kernel buffer. [type] is the WGSL element type (`i32` or `f32`), or null when any
+ * buffer type fits (an empty buffer, or a JS typed array of another kind).
+ */
+public class GpuData private constructor(internal val js: JsAny?, internal val length: Int, internal val type: String?) {
     /** Ways to create buffer data. */
     public companion object {
         /** A zero-filled buffer of [length] elements, not uploaded (for outputs). */
-        public fun empty(length: Int): GpuData = GpuData(null, length, isInt = false)
+        public fun empty(length: Int): GpuData = GpuData(null, length, type = null)
 
         /** Copies an IntArray for upload (an `i32` buffer). */
-        public fun of(values: IntArray): GpuData = GpuData(values.toJsInt32Array(), values.size, isInt = true)
+        public fun of(values: IntArray): GpuData = GpuData(values.toJsInt32Array(), values.size, type = "i32")
 
         /** Copies a FloatArray for upload (an `f32` buffer). */
-        public fun of(values: FloatArray): GpuData = GpuData(values.toJsFloat32Array(), values.size, isInt = false)
+        public fun of(values: FloatArray): GpuData = GpuData(values.toJsFloat32Array(), values.size, type = "f32")
 
         /** Wraps an existing JS `Int32Array` / `Float32Array` without copying. */
-        public fun ofJs(typedArray: JsAny): GpuData = GpuData(typedArray, typedArrayLength(typedArray), isInt = false)
+        public fun ofJs(typedArray: JsAny): GpuData =
+            GpuData(typedArray, typedArrayLength(typedArray), typedArrayType(typedArray).takeIf { it.isNotEmpty() })
     }
 }
 
@@ -99,10 +103,11 @@ public class GpuKernel internal constructor(private val gpu: WebGpu, public val 
      * [buffers] holds every array parameter by name.
      */
     public suspend fun run(size: Int, scalars: Map<String, Any> = emptyMap(), buffers: Map<String, GpuData>): GpuResult {
+        checkArguments(scalars, buffers)
         val view = newDataView(manifest.uniformBytes)
         setUint32(view, 0, size)
         manifest.scalars.forEachIndexed { i, p ->
-            val v = scalars[p.name] ?: throw IllegalArgumentException("Missing scalar parameter '${p.name}'")
+            val v = scalars.getValue(p.name)
             val offset = 4 + i * 4
             when (p.type) {
                 "f32" -> setFloat32(view, offset, (v as Number).toDouble())
@@ -113,10 +118,12 @@ public class GpuKernel internal constructor(private val gpu: WebGpu, public val 
         writeBuffer(device, uniform, dataViewBuffer(view))
 
         val start = now()
+        // Buffers reused from an earlier run still hold its data, so empty() ones are cleared on the GPU.
+        val clears = newArray()
         for (p in manifest.buffers) {
-            val data = buffers[p.name] ?: throw IllegalArgumentException("Missing buffer parameter '${p.name}'")
+            val data = buffers.getValue(p.name)
             val buffer = ensure(this.buffers, p.name, data.length * 4, USAGE_STORAGE)
-            data.js?.let { writeBuffer(device, buffer, it) }
+            data.js?.let { writeBuffer(device, buffer, it) } ?: push(clears, buffer)
         }
         val outputs = manifest.buffers.filter { it.isWritten }
         for (p in outputs) ensure(staging, p.name, bufferSize(this.buffers.getValue(p.name)), USAGE_STAGING)
@@ -136,11 +143,48 @@ public class GpuKernel internal constructor(private val gpu: WebGpu, public val 
             push(copiesFrom, this.buffers.getValue(p.name))
             push(copiesTo, staging.getValue(p.name))
         }
-        submitDispatch(device, pipeline, group, gx, gy, copiesFrom, copiesTo)
+        submitDispatch(device, pipeline, group, gx, gy, clears, copiesFrom, copiesTo)
 
         val results = LinkedHashMap<String, JsAny>()
         for (p in outputs) results[p.name] = readBack(staging.getValue(p.name), p.type == "i32").await<JsAny>()
         return GpuResult(now() - start, results)
+    }
+
+    /** Fails before anything reaches the GPU: unknown names, missing values and values of the wrong type. */
+    private fun checkArguments(scalars: Map<String, Any>, buffers: Map<String, GpuData>) {
+        fun unknown(kind: String, name: String, known: List<KernelManifest.Param>): Nothing = throw IllegalArgumentException(
+            "Unknown $kind parameter '$name' for ${source.name}; its $kind parameters are: " +
+                known.joinToString { it.name }.ifEmpty { "(none)" },
+        )
+        scalars.keys.firstOrNull { name -> manifest.scalars.none { it.name == name } }?.let { unknown("scalar", it, manifest.scalars) }
+        buffers.keys.firstOrNull { name -> manifest.buffers.none { it.name == name } }?.let { unknown("buffer", it, manifest.buffers) }
+        for (p in manifest.scalars) {
+            val v = scalars[p.name] ?: throw IllegalArgumentException("Missing scalar parameter '${p.name}'")
+            val ok = when (p.type) {
+                "f32" -> v is Number
+                "bool" -> v is Boolean
+                else -> v is Int
+            }
+            if (!ok) {
+                throw IllegalArgumentException(
+                    "Scalar parameter '${p.name}' is ${kotlinType(p.type)}, but got ${v::class.simpleName} ($v)",
+                )
+            }
+        }
+        for (p in manifest.buffers) {
+            val data = buffers[p.name] ?: throw IllegalArgumentException("Missing buffer parameter '${p.name}'")
+            if (data.type != null && data.type != p.type) {
+                throw IllegalArgumentException(
+                    "Buffer parameter '${p.name}' is ${kotlinType(p.type)}Array, but got ${kotlinType(data.type)}Array data",
+                )
+            }
+        }
+    }
+
+    private fun kotlinType(wgsl: String) = when (wgsl) {
+        "f32" -> "Float"
+        "bool" -> "Boolean"
+        else -> "Int"
     }
 
     private fun ensure(map: HashMap<String, JsAny>, name: String, bytes: Int, usage: Int): JsAny {
@@ -209,8 +253,9 @@ private fun writeBuffer(device: JsAny, buffer: JsAny, data: JsAny): Unit = js("{
 
 private fun maxWorkgroupsPerDimension(device: JsAny): Int = js("device.limits.maxComputeWorkgroupsPerDimension")
 
-private fun submitDispatch(device: JsAny, pipeline: JsAny, group: JsAny, gx: Int, gy: Int, from: JsAny, to: JsAny): Unit = js("""{
+private fun submitDispatch(device: JsAny, pipeline: JsAny, group: JsAny, gx: Int, gy: Int, clears: JsAny, from: JsAny, to: JsAny): Unit = js("""{
     const encoder = device.createCommandEncoder();
+    for (const buffer of clears) encoder.clearBuffer(buffer);
     const pass = encoder.beginComputePass();
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, group);
@@ -239,6 +284,9 @@ private fun setFloat32(view: JsAny, offset: Int, value: Double): Unit = js("{ vi
 private fun now(): Double = js("performance.now()")
 
 private fun typedArrayLength(array: JsAny): Int = js("array.length")
+
+private fun typedArrayType(array: JsAny): String =
+    js("array instanceof Int32Array ? 'i32' : array instanceof Float32Array ? 'f32' : ''")
 
 private fun readInt(array: JsAny, index: Int): Int = js("array[index]")
 
