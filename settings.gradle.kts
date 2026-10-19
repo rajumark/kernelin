@@ -4,12 +4,14 @@ pluginManagement {
     repositories {
         gradlePluginPortal()
         mavenCentral()
+        google()
     }
 }
 
 dependencyResolutionManagement {
     repositories {
         mavenCentral()
+        google()
     }
 }
 
@@ -19,4 +21,5 @@ include(
     "kernelin-gradle-plugin",
     "kernelin-webgpu",
     "samples",
+    "samples-android",
 )

@@ -114,7 +114,7 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 | Platform | Kernels run on the CPU (`KernelinCpu`) | `kernelSource(::k)` (WGSL) | GPU host in Kernelin |
 |---|---|---|---|
 | JVM | yes, also on all cores with `dispatchParallel` | yes | no (use the WGSL with your own WebGPU host) |
-| Android (JVM artifact) | yes | yes | no |
+| Android (JVM artifact) | yes | yes | yes: `kernelin-webgpu` on Android 8.0+, native WebGPU through AndroidX WebGPU **(main)** |
 | Kotlin/Wasm (`wasmJs`) | yes | yes | yes: `kernelin-webgpu` |
 | Kotlin/JS (`js`, browser and Node.js) **(0.3.0)** | yes | yes | no |
 | Kotlin/Native **(0.3.0)**: `macosArm64`, `iosArm64`, `iosSimulatorArm64`, `iosX64`, `tvosArm64`, `tvosSimulatorArm64`, `watchosArm32`, `watchosArm64`, `watchosSimulatorArm64`, `linuxX64`, `linuxArm64`, `mingwX64` | yes, on the calling thread | yes | no |
@@ -343,7 +343,9 @@ class SaxpyTest {
 
 ## Run on the GPU
 
-GPU execution is provided by `kernelin-webgpu` on the **Kotlin/Wasm** (`wasmJs`) target, in any browser with WebGPU.
+GPU execution is provided by `kernelin-webgpu` on the **Kotlin/Wasm** (`wasmJs`) target, in any browser with WebGPU,
+and **(main)** on **Android** 8.0+ natively, with no browser or WebView (see [On Android](#on-android-main)).
+The API is the same on both.
 
 ```kotlin
 import io.github.rajumark.kernelin.kernelSource
@@ -389,6 +391,34 @@ gpu.dispatch(x.size) { saxpy(alpha = 2.5f, x = x, y = y) }   // y now holds the 
 
 Use `gpu.load(...)` and `run(...)` with names (below) when you need more control: data that stays on the GPU
 (`GpuData.of(buffer)`), `GpuData.empty(n)` outputs, or choosing what to read back.
+
+### On Android **(main)**
+
+On Android, `kernelin-webgpu` runs kernels through [AndroidX WebGPU](https://developer.android.com/jetpack/androidx/releases/webgpu)
+(Google's Dawn on Vulkan, or on OpenGL ES 3.1 when Vulkan can't be used). The Gradle plugin doesn't add it for
+Android yet, so add the dependency yourself:
+
+```kotlin
+dependencies {
+    implementation("io.github.rajumark:kernelin-webgpu:<next version>")
+}
+```
+
+```kotlin
+val gpu = WebGpu.create()                           // throws GpuException when there is no usable GPU
+val result = gpu.load(kernelSource(::saxpy)).run(x.size, mapOf("alpha" to 2.5f), mapOf("x" to GpuData.of(x), "y" to GpuData.of(y)))
+val y2 = result.floats("y")
+```
+
+- `load` and `run` are `suspend` and can be called from any coroutine, including the main thread: every GPU call
+  runs on one background thread that the `WebGpu` owns. `close()` stops it.
+- `GpuResult.bytes(name)` is a little-endian `java.nio.ByteBuffer` (no copy); `floats` / `ints` copy into arrays.
+- Fall back to `KernelinCpu` when `WebGpu.create()` throws `GpuException`. **Emulators** offer no real GPU to
+  WebGPU (only Dawn's "Null" adapter, which runs nothing), so `create()` throws there; test GPU code on a phone.
+- Needs `minSdk` 26. The library adds Dawn's native code for `arm64-v8a`, `armeabi-v7a`, `x86` and `x86_64`
+  (several MB per ABI), so use App Bundles or ABI splits.
+- Benchmark on your phone: `scripts/bench-android-app.sh` builds and runs the `samples-android` app, which times
+  the sample kernels on the phone's GPU and CPU and checks that the results match.
 
 ### Rules for `run`
 
@@ -635,11 +665,11 @@ as the one `WebGpu.dispatch` takes). For GPU hosts; users just write the block.
 | `wgsl(fqName)` | Reads `kernelin/<fqName>.wgsl` from the classpath |
 | `manifest(fqName)` | Reads `kernelin/<fqName>.json` from the classpath |
 
-### `WebGpu` (Kotlin/Wasm)
+### `WebGpu` (Kotlin/Wasm, and Android **(main)**)
 
 | Member | Description |
 |---|---|
-| `WebGpu.isSupported` | `true` when the browser exposes `navigator.gpu` |
+| `WebGpu.isSupported` | `true` when the browser exposes `navigator.gpu`; on Android, on API 26+ |
 | `suspend WebGpu.create()` | Requests a GPU device. Throws `UnsupportedOperationException` without WebGPU |
 | `description` | Human-readable GPU description |
 | `suspend load(source)` | Compiles the shader and pipeline. Throws if the browser rejects the WGSL, `GpuException` if it rejects the pipeline |

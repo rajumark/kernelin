@@ -5,8 +5,11 @@ junit = "5.13.4"
 coroutines = "1.11.0"
 vanniktech-maven-publish = "0.37.0"
 kover = "0.9.11"
-# Only used by the Gradle plugin's functional tests (Android projects).
+# Builds the Android target of kernelin-webgpu, and the Gradle plugin's functional tests (Android projects).
 agp = "9.3.1"
+# Native WebGPU (Dawn) for the Android GPU host.
+androidx-webgpu = "1.0.0-alpha06"
+androidx-test-runner = "1.7.0"
 
 [libraries]
 kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
@@ -16,10 +19,14 @@ junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+androidx-webgpu = { module = "androidx.webgpu:webgpu", version.ref = "androidx-webgpu" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 vanniktech-maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "vanniktech-maven-publish" }
+android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+android-application = { id = "com.android.application", version.ref = "agp" }
 kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }

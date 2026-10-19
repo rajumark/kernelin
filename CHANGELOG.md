@@ -13,6 +13,13 @@
   state, so pass `globalId()` as the index and a different `stream` for each draw. `randomInt`, `randomFloat` and
   `randomIntBelow` give the same bits on the CPU (every platform) and the GPU; `randomNormal` agrees to about 1e-5.
   Before, apps had to write their own hash.
+- `kernelin-webgpu` now runs on **Android** 8.0+ (API 26), natively through AndroidX WebGPU (Dawn on Vulkan, or
+  OpenGL ES 3.1), without a browser or WebView. Same API as the Kotlin/Wasm host: `WebGpu.create()`, typed `dispatch`, `load`, `run`,
+  data kept on the GPU, lost devices, `close()`. Every GPU call runs on one background thread owned by the `WebGpu`.
+- The argument checks of `GpuKernel.run` moved to common code, so every GPU host rejects the same calls.
+- New `samples-android` app and `scripts/bench-android-app.sh`: the benchmark kernels on a phone's GPU (native, not
+  Chrome) and CPU, with a GPU-vs-CPU result check. Android GPU tests: `gradle :kernelin-webgpu:connectedAndroidDeviceTest`
+  (skipped on emulators, which have no real GPU for WebGPU).
 
 ## 0.3.0 (2026-10-19)
 

@@ -125,6 +125,7 @@ gradle build
 gradle :samples:bench -Pout=/path/to/folder   # then serve the folder and open runner.html
 scripts/bench-android.sh /path/to/folder      # same GPU benchmark in Chrome on a USB-connected Android phone
 scripts/bench-android-cpu.sh                 # the CPU side on the phone (Kotlin on ART)
+scripts/bench-android-app.sh                 # GPU (native WebGPU, no browser) and CPU benchmark in an Android app
 gradle :samples:exportDemo                     # rebuild the Kotlin/Wasm live demo into docs/demo
 ```
 

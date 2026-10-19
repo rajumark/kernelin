@@ -11,9 +11,9 @@ Kernelin is a K2 compiler plugin that turns plain Kotlin `@Kernel` functions int
 |---|---|
 | `kernelin-runtime` | Multiplatform (JVM, JS, Wasm, Native): `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` |
 | `kernelin-compiler-plugin` | `KernelinIrGenerationExtension` finds kernels; `WgslKernelTranslator` turns IR into WGSL |
-| `kernelin-webgpu` | Kotlin/Wasm WebGPU host (`WebGpu`, `GpuKernel`, `GpuData`) |
+| `kernelin-webgpu` | WebGPU host (`WebGpu`, `GpuKernel`, `GpuData`) for Kotlin/Wasm and Android (AndroidX WebGPU); shared argument checks in `commonMain` |
 | `kernelin-gradle-plugin` | Plugin id `io.github.rajumark.kernelin`; TestKit tests in `src/functionalTest` (`functionalTest` task) |
-| `samples`, `examples` | Sample kernels, benchmark, live demo; standalone example projects |
+| `samples`, `samples-android`, `examples` | Sample kernels, benchmark, live demo; Android benchmark app; standalone example projects |
 | `docs` | GitHub Pages site: `index.html` (landing), `docs.html` + `docs.md` (documentation), `llms.txt`, `demo/` |
 
 ## Build and test
@@ -23,6 +23,8 @@ Kernelin is a K2 compiler plugin that turns plain Kotlin `@Kernel` functions int
 - GPU tests need Deno (`brew install deno`); without it they are skipped locally. CI runs them on llvmpipe.
 - CI (`.github/workflows/ci.yml`) builds, tests, fuzzes and runs both examples; a macOS job runs the Apple targets.
 - The Gradle plugin's functional tests build Android projects only when `ANDROID_HOME` points to an Android SDK.
+- The build needs an Android SDK (`ANDROID_HOME`) for the Android target of `kernelin-webgpu` and `samples-android`.
+- Android GPU tests: `gradle :kernelin-webgpu:connectedAndroidDeviceTest` on a phone (emulators have no real GPU for WebGPU, so they skip).
 
 ## Rules
 

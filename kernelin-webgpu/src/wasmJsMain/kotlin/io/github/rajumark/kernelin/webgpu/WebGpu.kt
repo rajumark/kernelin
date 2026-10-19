@@ -308,7 +308,12 @@ public class GpuKernel internal constructor(
         readBack: Set<String>? = null,
     ): GpuResult = mutex.withLock {
         checkOpen()
-        checkArguments(scalars, buffers, readBack)
+        checkRunArguments(
+            source,
+            scalars,
+            buffers.mapValues { (_, data) -> BufferArgument(data.type, data.gpuBuffer == null || data.gpuBuffer.gpu === gpu) },
+            readBack,
+        )
         val view = newDataView(manifest.uniformBytes)
         setUint32(view, 0, size)
         manifest.scalars.forEachIndexed { i, p ->
@@ -388,9 +393,7 @@ public class GpuKernel internal constructor(
             createBindGroup(device, layout, entries, "$label: bind group").also { bindGroup = it }
         }
 
-        val groups = (size + manifest.workgroupSize - 1) / manifest.workgroupSize
-        val gx = minOf(groups, maxWorkgroupsPerDimension(device)).coerceAtLeast(1)
-        val gy = (groups + gx - 1) / gx
+        val (gx, gy) = workgroupGrid(size, manifest.workgroupSize, maxWorkgroupsPerDimension(device))
         val copiesFrom = newArray()
         val copiesTo = newArray()
         for (p in outputs) {
@@ -400,7 +403,6 @@ public class GpuKernel internal constructor(
         submitDispatch(device, pipeline, group, gx, gy, clears, copyInFrom, copyInTo, copiesFrom, copiesTo, "$label: run")
         // Destroyed after the submit: WebGPU frees them once the GPU work that uses them is done.
         destroyAll(retired)
-
     }
 
     /** The 0.2.0 signature, kept so code compiled against it still links. */
@@ -426,52 +428,6 @@ public class GpuKernel internal constructor(
     private fun checkOpen() {
         check(!isClosed) { "GpuKernel ${source.name} was closed; load it again with WebGpu.load()" }
         gpu.checkUsable()
-    }
-
-    /** Fails before anything reaches the GPU: unknown names, missing values and values of the wrong type. */
-    private fun checkArguments(scalars: Map<String, Any>, buffers: Map<String, GpuData>, readBack: Set<String>?) {
-        fun unknown(kind: String, name: String, known: List<KernelManifest.Param>): Nothing = throw IllegalArgumentException(
-            "Unknown $kind parameter '$name' for ${source.name}; its $kind parameters are: " +
-                known.joinToString { it.name }.ifEmpty { "(none)" },
-        )
-        scalars.keys.firstOrNull { name -> manifest.scalars.none { it.name == name } }?.let { unknown("scalar", it, manifest.scalars) }
-        buffers.keys.firstOrNull { name -> manifest.buffers.none { it.name == name } }?.let { unknown("buffer", it, manifest.buffers) }
-        for (p in manifest.scalars) {
-            val v = scalars[p.name] ?: throw IllegalArgumentException("Missing scalar parameter '${p.name}'")
-            val ok = when (p.type) {
-                "f32" -> v is Number
-                "bool" -> v is Boolean
-                else -> v is Int
-            }
-            if (!ok) {
-                throw IllegalArgumentException(
-                    "Scalar parameter '${p.name}' is ${kotlinType(p.type)}, but got ${v::class.simpleName} ($v)",
-                )
-            }
-        }
-        for (p in manifest.buffers) {
-            val data = buffers[p.name] ?: throw IllegalArgumentException("Missing buffer parameter '${p.name}'")
-            if (data.type != null && data.type != p.type) {
-                throw IllegalArgumentException(
-                    "Buffer parameter '${p.name}' is ${kotlinType(p.type)}Array, but got ${kotlinType(data.type)}Array data",
-                )
-            }
-            if (data.gpuBuffer != null && data.gpuBuffer.gpu !== gpu) {
-                throw IllegalArgumentException("Buffer parameter '${p.name}' got a GpuBuffer from another WebGpu device")
-            }
-        }
-        readBack?.firstOrNull { name -> manifest.buffers.none { it.name == name && it.isWritten } }?.let {
-            throw IllegalArgumentException(
-                "readBack: '$it' is not a buffer that ${source.name} writes; those are: " +
-                    manifest.buffers.filter { b -> b.isWritten }.joinToString { b -> b.name }.ifEmpty { "(none)" },
-            )
-        }
-    }
-
-    private fun kotlinType(wgsl: String) = when (wgsl) {
-        "f32" -> "Float"
-        "bool" -> "Boolean"
-        else -> "Int"
     }
 
     private fun ensure(map: HashMap<String, JsAny>, name: String, bytes: Int, usage: Int, label: String, retired: JsAny): JsAny {
