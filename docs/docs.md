@@ -2,7 +2,7 @@
 
 Kernelin lets you write GPU compute kernels in plain Kotlin. A K2 compiler plugin translates every function marked `@Kernel` into a WGSL compute shader. The shader runs on any GPU through WebGPU, and the original function stays normal Kotlin, so it also runs on the CPU for unit tests.
 
-> This page describes **Kernelin 0.2.0**, built for **Kotlin 2.4.21**. Features marked **(0.2.0)** are new in this release; **(next release)** marks what is on `main` but not yet on Maven Central. The same text is available as plain Markdown at [`docs.md`](docs.md) for tools and AI agents.
+> This page describes **Kernelin 0.3.0**, built for **Kotlin 2.4.21**. Features marked **(0.3.0)** are new in this release; **(0.3.0)** marks what is on `main` but not yet on Maven Central. The same text is available as plain Markdown at [`docs.md`](docs.md) for tools and AI agents.
 
 ```kotlin
 @Kernel
@@ -42,7 +42,7 @@ Then apply the Gradle plugin next to the Kotlin plugin:
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.21"          // or kotlin("multiplatform"), or an Android plugin
-    id("io.github.rajumark.kernelin") version "0.2.0"
+    id("io.github.rajumark.kernelin") version "0.3.0"
 }
 ```
 
@@ -93,10 +93,10 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 
 | Artifact | What it is |
 |---|---|
-| `io.github.rajumark:kernelin-runtime:0.2.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` (JVM, JS, Wasm, Native; see below) |
-| `io.github.rajumark:kernelin-webgpu:0.2.0` | Kotlin/Wasm WebGPU host: `WebGpu`, `GpuKernel`, `GpuData`, `GpuResult` |
-| `io.github.rajumark:kernelin-compiler-plugin:0.2.0` | The K2 compiler plugin (added by the Gradle plugin) |
-| `io.github.rajumark:kernelin-gradle-plugin:0.2.0` | Gradle plugin with id `io.github.rajumark.kernelin` |
+| `io.github.rajumark:kernelin-runtime:0.3.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` (JVM, JS, Wasm, Native; see below) |
+| `io.github.rajumark:kernelin-webgpu:0.3.0` | Kotlin/Wasm WebGPU host: `WebGpu`, `GpuKernel`, `GpuData`, `GpuResult` |
+| `io.github.rajumark:kernelin-compiler-plugin:0.3.0` | The K2 compiler plugin (added by the Gradle plugin) |
+| `io.github.rajumark:kernelin-gradle-plugin:0.3.0` | Gradle plugin with id `io.github.rajumark.kernelin` |
 
 ### What the Gradle plugin does
 
@@ -104,7 +104,7 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 - **Kotlin JVM projects:** adds `kernelin-runtime` to `implementation`.
 - **Kotlin Multiplatform projects:** adds `kernelin-runtime` to `commonMain`, and `kernelin-webgpu` to `wasmJsMain` when a `wasmJs` target exists.
   This includes Android targets made with `com.android.kotlin.multiplatform.library`.
-- **Android projects (next release):** adds `kernelin-runtime` to `implementation`, both with the Kotlin Android
+- **Android projects (0.3.0):** adds `kernelin-runtime` to `implementation`, both with the Kotlin Android
   plugin (`org.jetbrains.kotlin.android`) and with AGP 9's built-in Kotlin (only `com.android.application` or
   `com.android.library`). With built-in Kotlin, make sure the Kotlin Gradle plugin is version 2.4.21 (for example
   `classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21")` in `buildscript`).
@@ -116,13 +116,13 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 | JVM | yes, also on all cores with `dispatchParallel` | yes | no (use the WGSL with your own WebGPU host) |
 | Android (JVM artifact) | yes | yes | no |
 | Kotlin/Wasm (`wasmJs`) | yes | yes | yes: `kernelin-webgpu` |
-| Kotlin/JS (`js`, browser and Node.js) **(next release)** | yes | yes | no |
-| Kotlin/Native **(next release)**: `macosArm64`, `iosArm64`, `iosSimulatorArm64`, `iosX64`, `tvosArm64`, `tvosSimulatorArm64`, `watchosArm32`, `watchosArm64`, `watchosSimulatorArm64`, `linuxX64`, `linuxArm64`, `mingwX64` | yes, on the calling thread | yes | no |
+| Kotlin/JS (`js`, browser and Node.js) **(0.3.0)** | yes | yes | no |
+| Kotlin/Native **(0.3.0)**: `macosArm64`, `iosArm64`, `iosSimulatorArm64`, `iosX64`, `tvosArm64`, `tvosSimulatorArm64`, `watchosArm32`, `watchosArm64`, `watchosSimulatorArm64`, `linuxX64`, `linuxArm64`, `mingwX64` | yes, on the calling thread | yes | no |
 
 Kernels in `commonMain` compile for every target above. The compiler plugin runs on all of them, so a kernel that
 the GPU can't run is a compile error everywhere, not only on the Wasm target.
 
-### Gradle settings **(next release)**
+### Gradle settings **(0.3.0)**
 
 ```kotlin
 // build.gradle.kts
@@ -142,7 +142,7 @@ target runs them on the GPU.
 // build.gradle.kts
 plugins {
     kotlin("multiplatform") version "2.4.21"
-    id("io.github.rajumark.kernelin") version "0.2.0"
+    id("io.github.rajumark.kernelin") version "0.3.0"
 }
 
 kotlin {
@@ -372,20 +372,20 @@ suspend fun runSaxpy(x: FloatArray, y: FloatArray): FloatArray {
 - `buffers` must contain **every** array parameter by its Kotlin name.
 - `run` checks the arguments before anything reaches the GPU: an unknown name, an `Int` parameter given a `Float`
   (or any other wrong scalar type), and `FloatArray` data for an `IntArray` parameter (or the other way round) throw
-  `IllegalArgumentException` (unreleased; before, they were silently ignored or reinterpreted).
-- Use `GpuData.empty(n)` for pure outputs, so nothing is uploaded. It starts from zeros on every run (unreleased;
+  `IllegalArgumentException` (since 0.3.0; before, they were silently ignored or reinterpreted).
+- Use `GpuData.empty(n)` for pure outputs, so nothing is uploaded. It starts from zeros on every run (since 0.3.0;
   before, a second run of the same size kept the previous run's values).
 - Only arrays the kernel writes (`read_write`) are copied back. Read them with `result.floats(name)` or `result.ints(name)`.
-  Pass `readBack = setOf("out")` to copy back only some of them, or `emptySet()` for none (unreleased).
+  Pass `readBack = setOf("out")` to copy back only some of them, or `emptySet()` for none (since 0.3.0).
 - `result.millis` is the time from upload until the results are back.
 - Runs of one `GpuKernel` never overlap: if you call `run` again before the first one finished, the second waits
-  (unreleased; before, the two runs shared GPU buffers and one of them failed).
+  (since 0.3.0; before, the two runs shared GPU buffers and one of them failed).
 - When WebGPU reports an error (out of GPU memory, a rejected command, a lost device), `run` and `load` throw
-  `GpuException` with the browser's message (unreleased; before, errors only appeared in the browser console).
+  `GpuException` with the browser's message (since 0.3.0; before, errors only appeared in the browser console).
   Every GPU buffer, pipeline and bind group has a label like `my.pkg.blur: out`, so browser messages name the
   kernel and the parameter.
 
-### Keep data on the GPU (unreleased)
+### Keep data on the GPU **(0.3.0)**
 
 Copying data to the CPU and back is often slower than the kernel itself. To run several kernels one after the
 other, keep the data on the GPU: skip the read back with `readBack`, take the buffer with `result.buffer(name)`
@@ -405,7 +405,7 @@ A `GpuBuffer` is the kernel's own buffer, so it is valid only until that kernel 
 `isValid`); using an older one throws `IllegalStateException`. Pass it on before the next run of its kernel, as
 above. It must come from a kernel of the same `WebGpu`.
 
-### Lost devices and cleaning up (unreleased)
+### Lost devices and cleaning up **(0.3.0)**
 
 The browser can take the GPU away at any time (a driver update, a GPU reset, too many tabs). Then `gpu.isLost` is
 true, `gpu.onLost` is called with the reason, and every `load` and `run` throws `GpuException`. Create a new
@@ -425,8 +425,8 @@ gpu.onUncapturedError = { message -> console.log("WebGPU error: $message") }  //
 - **Do enough work per element.** Copying data to the GPU and back costs time. Light kernels (one add per element) can be slower end-to-end than the CPU; heavy math wins big (see the benchmarks on the home page).
 - **Use `GpuData.ofJs(typedArray)`** to pass an existing JS `Float32Array` without a copy, and `result.js(name)` to get the output typed array without a copy.
 - **Keep data on the GPU** between kernels: `readBack = emptySet()` and `GpuData.of(result.buffer(name))` (see
-  [Keep data on the GPU](#keep-data-on-the-gpu-unreleased)). Read back only what you need, once, at the end.
-- **Copies between Kotlin arrays and the GPU are bulk copies** (unreleased): `GpuData.of(FloatArray)`,
+  [Keep data on the GPU](#keep-data-on-the-gpu-030)). Read back only what you need, once, at the end.
+- **Copies between Kotlin arrays and the GPU are bulk copies** (since 0.3.0): `GpuData.of(FloatArray)`,
   `result.floats(name)` and `toJsFloat32Array()` copy 4M floats in about 3 ms in Node (before: about 20 ms,
   one element at a time). `ofJs` / `js` still avoid even that copy.
 
@@ -437,10 +437,10 @@ The same kernel gives the same results on the CPU and the GPU, with these known 
 | Case | On the CPU (Kotlin) | On the GPU (WGSL) |
 |---|---|---|
 | Float rounding in `sin`, `exp`, `pow`, … | IEEE 754 double-backed results | 32-bit, may differ in the last bits. Compare with a tolerance |
-| `for (i in a..b step s)` with `s` 0 or less | Throws `IllegalArgumentException` | **No iterations** (unreleased; a constant step of 0 or less is a compile error). Before, the loop never ended |
-| `min`, `max`, `coerceIn`, `sign`, `compareTo` with NaN or `-0f` | NaN wins in `min`/`max`, `-0f < 0f`, NaN is the largest in `compareTo` | **Same as Kotlin** (unreleased). WGSL leaves these unspecified, so 0.2.0 and older may differ |
-| `hypot`, `log10` | Computed in Double, rounded once | **Within 2 ULPs (`hypot`) and 4 ULPs (`log10`)** (unreleased). Before, `hypot` overflowed to Infinity for values above about 1e19 |
-| `pow` with a negative or zero base | `(-2f).pow(3f) == -8f`, `(-2f).pow(0.5f)` is NaN | **Same as Kotlin** (unreleased). WGSL leaves these undefined, so 0.2.0 and older may return NaN on Vulkan GPUs |
+| `for (i in a..b step s)` with `s` 0 or less | Throws `IllegalArgumentException` | **No iterations** (since 0.3.0; a constant step of 0 or less is a compile error). Before, the loop never ended |
+| `min`, `max`, `coerceIn`, `sign`, `compareTo` with NaN or `-0f` | NaN wins in `min`/`max`, `-0f < 0f`, NaN is the largest in `compareTo` | **Same as Kotlin** (since 0.3.0). WGSL leaves these unspecified, so 0.2.0 and older may differ |
+| `hypot`, `log10` | Computed in Double, rounded once | **Within 2 ULPs (`hypot`) and 4 ULPs (`log10`)** (since 0.3.0). Before, `hypot` overflowed to Infinity for values above about 1e19 |
+| `pow` with a negative or zero base | `(-2f).pow(3f) == -8f`, `(-2f).pow(0.5f)` is NaN | **Same as Kotlin** (since 0.3.0). WGSL leaves these undefined, so 0.2.0 and older may return NaN on Vulkan GPUs |
 | Float division by zero (`x / 0f`) | `Infinity` or `NaN` | **Not guaranteed.** WGSL leaves it undefined; some GPUs (for example llvmpipe, used in CI) return an ordinary number. Check the divisor yourself |
 | `Infinity` / `NaN` that arrive in a buffer | Normal Kotlin behaviour | **Same as Kotlin** (since 0.2.0): `isNaN()`, `isInfinite()`, `isFinite()` and `toInt()` check the raw bits |
 | `Float.toInt()` on NaN or out-of-range values | NaN → 0, saturates at `Int.MIN_VALUE` / `Int.MAX_VALUE` | **Same as Kotlin** (since 0.2.0). On 0.1.0 the result is GPU-specific |
@@ -498,7 +498,7 @@ To see them in the IDE:
 
 Frontend errors stop the build before the translator runs. If a kernel has both kinds of mistakes, the remaining errors show up after you fix the first ones.
 
-With the compiler's `-verbose` flag, the build log shows `Kernelin: translated @Kernel com.example.saxpy to WGSL (N lines)` for each kernel (since the unreleased version; before, every build printed it).
+With the compiler's `-verbose` flag, the build log shows `Kernelin: translated @Kernel com.example.saxpy to WGSL (N lines)` for each kernel (since 0.3.0; before, every build printed it).
 
 ## API reference
 
@@ -573,10 +573,10 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `suspend WebGpu.create()` | Requests a GPU device. Throws `UnsupportedOperationException` without WebGPU |
 | `description` | Human-readable GPU description |
 | `suspend load(source)` | Compiles the shader and pipeline. Throws if the browser rejects the WGSL, `GpuException` if it rejects the pipeline |
-| `isLost`, `lostReason` | Whether the browser took the device away, and why **(unreleased)** |
-| `onLost` | Called once with the reason when the device is lost (not after `close()`) **(unreleased)** |
-| `onUncapturedError` | Called with WebGPU errors that happen outside `load` and `run` **(unreleased)** |
-| `close()`, `isClosed` | Frees every kernel and the device; `AutoCloseable` **(unreleased)** |
+| `isLost`, `lostReason` | Whether the browser took the device away, and why **(since 0.3.0)** |
+| `onLost` | Called once with the reason when the device is lost (not after `close()`) **(since 0.3.0)** |
+| `onUncapturedError` | Called with WebGPU errors that happen outside `load` and `run` **(since 0.3.0)** |
+| `close()`, `isClosed` | Frees every kernel and the device; `AutoCloseable` **(since 0.3.0)** |
 
 ### `GpuKernel`
 
@@ -584,7 +584,7 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 |---|---|
 | `source`, `manifest` | What this kernel was built from |
 | `suspend run(size, scalars, buffers, readBack = null)` | Uploads inputs, dispatches `size` threads, reads back the `read_write` buffers named in `readBack` (null: all). Runs of one kernel wait for each other. Throws `GpuException` on WebGPU errors |
-| `close()`, `isClosed` | Frees the kernel's GPU buffers; later runs throw `IllegalStateException`. `AutoCloseable` **(unreleased)** |
+| `close()`, `isClosed` | Frees the kernel's GPU buffers; later runs throw `IllegalStateException`. `AutoCloseable` **(since 0.3.0)** |
 
 ### `GpuData`
 
@@ -593,7 +593,7 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `GpuData.of(FloatArray)` / `GpuData.of(IntArray)` | Upload these values |
 | `GpuData.empty(length)` | Output only, nothing uploaded; zero-filled on every run |
 | `GpuData.ofJs(typedArray)` | Wrap an existing JS typed array without copying |
-| `GpuData.of(GpuBuffer)` | Use a buffer already on the GPU (from `result.buffer(name)`); copied on the GPU **(unreleased)** |
+| `GpuData.of(GpuBuffer)` | Use a buffer already on the GPU (from `result.buffer(name)`); copied on the GPU **(since 0.3.0)** |
 
 ### `GpuResult`
 
@@ -602,16 +602,16 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `millis` | Time from upload until results were back |
 | `floats(name)` / `ints(name)` | Copy an output buffer into a Kotlin array |
 | `js(name)` | The raw JS typed array, no copy |
-| `buffer(name)` | The kernel's `GpuBuffer` for parameter `name` after this run, still on the GPU **(unreleased)** |
+| `buffer(name)` | The kernel's `GpuBuffer` for parameter `name` after this run, still on the GPU **(since 0.3.0)** |
 
-### `GpuBuffer` **(unreleased)**
+### `GpuBuffer` **(0.3.0)**
 
 | Member | Description |
 |---|---|
 | `name`, `length` | The kernel parameter and its number of elements |
 | `isValid` | `false` once its kernel ran again or was closed; then passing it to `run` throws `IllegalStateException` |
 
-### `GpuException` **(unreleased)**
+### `GpuException` **(0.3.0)**
 
 Thrown by `load` and `run` when WebGPU reports an error: a validation error, out of GPU memory, a rejected
 pipeline, or a lost device. The message is the browser's, with the kernel name.
@@ -751,7 +751,7 @@ gradle :samples:exportDemo                     # rebuild the live demo into docs
 
 **`kernelSource() was not replaced`** — The module calling `kernelSource` doesn't have the compiler plugin. Apply `id("io.github.rajumark.kernelin")` to that module.
 
-**The plugin fails with an API error** — Your Kotlin version is not 2.4.21. Kernelin 0.2.0 only supports Kotlin 2.4.21.
+**The plugin fails with an API error** — Your Kotlin version is not 2.4.21. Kernelin 0.3.0 only supports Kotlin 2.4.21.
 
 **`WebGPU is not available in this browser`** — Use a recent Chrome, Edge or Safari, or enable WebGPU in Firefox. Check `WebGpu.isSupported` before calling `create()`.
 
@@ -857,7 +857,7 @@ val out = result.floats("out")
 ### Snippet for your project's `AGENTS.md` or `CLAUDE.md`
 
 ```text
-This project uses Kernelin 0.2.0 (Kotlin 2.4.21) to run @Kernel functions on the GPU.
+This project uses Kernelin 0.3.0 (Kotlin 2.4.21) to run @Kernel functions on the GPU.
 Docs for agents: https://rajumark.github.io/kernelin/docs.md
 When writing a @Kernel: top-level, returns Unit, params only FloatArray/IntArray/Int/Float/Boolean,
 start with val i = globalId(), write results to out[i], Float literals with f,

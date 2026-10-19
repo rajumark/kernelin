@@ -31,4 +31,4 @@ Not public: anything `internal`, the compiler plugin's classes, and the exact WG
 ## Kotlin versions
 
 The Kotlin compiler plugin API changes between Kotlin releases, so each Kernelin release is built for one
-Kotlin version (0.1.0 and 0.2.0: Kotlin 2.4.21). New Kotlin versions are supported in new Kernelin releases.
+Kotlin version (0.1.0, 0.2.0 and 0.3.0: Kotlin 2.4.21). New Kotlin versions are supported in new Kernelin releases.

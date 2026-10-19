@@ -2,7 +2,7 @@ rootProject.name = "hello-multiplatform"
 
 pluginManagement {
     // Uses Kernelin straight from this repository. In your own project, drop both includeBuild lines and
-    // write id("io.github.rajumark.kernelin") version "0.2.0": it then comes from Maven Central.
+    // write id("io.github.rajumark.kernelin") version "0.3.0": it then comes from Maven Central.
     includeBuild("../..")
     repositories {
         gradlePluginPortal()

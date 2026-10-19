@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0 (2026-10-19)
+
 More platforms:
 - `kernelin-runtime` now also targets Kotlin/JS (browser and Node.js) and Kotlin/Native (`macosArm64`, `iosArm64`,
   `iosSimulatorArm64`, `iosX64`, `tvosArm64`, `tvosSimulatorArm64`, `watchosArm32`, `watchosArm64`,
