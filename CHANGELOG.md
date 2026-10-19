@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Typed launches: `gpu.dispatch(n) { saxpy(alpha = 2f, x = xs, y = ys) }` runs a kernel on the GPU with a normal
+  Kotlin call, so parameter names, types and count are checked at compile time (and completed by the IDE) instead
+  of at run time. The arrays the kernel writes hold the results afterwards, like with `KernelinCpu.dispatch`. The
+  compiler plugin records the call in a new `KernelLaunch` (runtime) that GPU hosts read with
+  `KernelLaunch.capture`. A launch block that is not exactly one kernel call is a compile error, shown in the IDE
+  too. The map API (`gpu.load(...).run(size, scalars, buffers)`) still works.
+
 ## 0.3.0 (2026-10-19)
 
 More platforms:

@@ -365,6 +365,30 @@ suspend fun runSaxpy(x: FloatArray, y: FloatArray): FloatArray {
 }
 ```
 
+### Typed launches **(main)**
+
+`gpu.dispatch` runs a kernel with a normal Kotlin call, so the compiler checks it:
+
+```kotlin
+val gpu = WebGpu.create()
+gpu.dispatch(x.size) { saxpy(alpha = 2.5f, x = x, y = y) }   // y now holds the result
+```
+
+- The block is **one call to a `@Kernel` function**. The compiler checks the parameter names, types and count like
+  any other call, and the IDE completes them. A typo (`alpah = 2.5f`) or a wrong type (`2.5` instead of `2.5f`,
+  an `IntArray` for a `FloatArray`) is a compile error, not a run-time error.
+- The kernel does **not** run on the CPU here. The compiler plugin turns the call into a `KernelLaunch` (the shader
+  plus the argument values), and `dispatch` runs it on the GPU.
+- It works like `KernelinCpu.dispatch(n) { saxpy(2.5f, x, y) }`: afterwards, the arrays the kernel writes hold the
+  results. `dispatch` also returns the `GpuResult` (with `millis` and the GPU buffers).
+- The kernel is loaded on the first `dispatch` and reused after that.
+- Anything other than one kernel call in the block is a compile error:
+  `a launch block must be exactly one call to a @Kernel function`. Compute other values before the block.
+- The kernel must come from the same module, like `kernelSource(::k)`.
+
+Use `gpu.load(...)` and `run(...)` with names (below) when you need more control: data that stays on the GPU
+(`GpuData.of(buffer)`), `GpuData.empty(n)` outputs, or choosing what to read back.
+
 ### Rules for `run`
 
 - `size` is the number of threads (usually the length of the output array).
@@ -483,6 +507,9 @@ Common messages and fixes:
 | `an if/when used as a value needs an else branch` | Add `else` |
 | `integer division by zero (Kotlin would throw ArithmeticException here)` **(0.2.0)** | Fix the constant divisor |
 | `kernelSource() was not replaced: apply the Kernelin compiler plugin` (at runtime) | Apply the Gradle plugin to that module |
+| `a launch block must be exactly one call to a @Kernel function` **(main)** | Write `gpu.dispatch(n) { k(...) }` with only the call; compute other values before it |
+| `pass a value for every kernel parameter ('p' has none)` **(main)** | Default values can't be launched; pass every argument |
+| `No @Kernel call was recorded` (at runtime) **(main)** | Apply the Gradle plugin to the module with the `dispatch` call |
 
 ### Errors in your IDE **(0.2.0)**
 
@@ -558,6 +585,18 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `dispatch(size) { ... }` | all (JVM, JS, Wasm, Native) | Runs the block once per id in `0 until size` on the calling thread |
 | `dispatchParallel(size) { ... }` | JVM | Same, split across all CPU cores |
 
+### `KernelLaunch` **(main)**
+
+One kernel call recorded by the compiler plugin from a launch block (a lambda with a `KernelLaunch` receiver, such
+as the one `WebGpu.dispatch` takes). For GPU hosts; users just write the block.
+
+| Member | Description |
+|---|---|
+| `KernelLaunch.capture(block)` | Runs the block and returns the call. Throws `IllegalStateException` if it holds no kernel call (plugin not applied) |
+| `source` | The kernel's `KernelSource` |
+| `scalars` | `Int` / `Float` / `Boolean` arguments by parameter name |
+| `arrays` | `IntArray` / `FloatArray` arguments by parameter name (the same array objects) |
+
 ### `KernelinShaders` (JVM)
 
 | Function | Description |
@@ -573,6 +612,7 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `suspend WebGpu.create()` | Requests a GPU device. Throws `UnsupportedOperationException` without WebGPU |
 | `description` | Human-readable GPU description |
 | `suspend load(source)` | Compiles the shader and pipeline. Throws if the browser rejects the WGSL, `GpuException` if it rejects the pipeline |
+| `suspend dispatch(size) { k(...) }` | Typed launch: runs one `@Kernel` call on the GPU, writes the results into the arrays the kernel writes, returns the `GpuResult`. Loads the kernel once **(main)** |
 | `isLost`, `lostReason` | Whether the browser took the device away, and why **(since 0.3.0)** |
 | `onLost` | Called once with the reason when the device is lost (not after `close()`) **(since 0.3.0)** |
 | `onUncapturedError` | Called with WebGPU errors that happen outside `load` and `run` **(since 0.3.0)** |
@@ -845,6 +885,10 @@ class MyKernelTest {
 
 ```kotlin
 val gpu = WebGpu.create()
+// Typed (main): checked by the compiler; `out` holds the result afterwards.
+gpu.dispatch(n) { myKernel(input = input, out = out, factor = 2f, count = 1) }
+
+// By name (0.3.0):
 val kernel = gpu.load(kernelSource(::myKernel))
 val result = kernel.run(
     size = n,

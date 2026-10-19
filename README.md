@@ -88,6 +88,14 @@ See [`examples/`](examples) for complete projects (`hello-jvm`, `hello-multiplat
 
 ```kotlin
 val gpu = WebGpu.create()                              // Kotlin/Wasm, any WebGPU browser
+gpu.dispatch(n) { saxpy(alpha = 2.5f, x = x, y = y) }  // a normal call: names and types checked at compile time
+// y now holds the result, just like after KernelinCpu.dispatch(n) { saxpy(2.5f, x, y) }
+```
+
+Typed `dispatch` is on `main` (not released yet). With 0.3.0, or for more control (data that stays on the GPU),
+load the kernel and pass arguments by name:
+
+```kotlin
 val kernel = gpu.load(kernelSource(::saxpy))           // the compiler embeds the WGSL here
 val result = kernel.run(
     size = n,
@@ -103,7 +111,7 @@ val y2 = result.floats("y")
 |---|---|
 | `kernelin-runtime` | Multiplatform (JVM, JS, Wasm, iOS, macOS, tvOS, watchOS, Linux, Windows): `@Kernel`, `globalId()`, `KernelinCpu` (CPU runner), `kernelSource(::k)` |
 | `kernelin-compiler-plugin` | K2 compiler plugin; `WgslKernelTranslator` turns Kotlin IR into WGSL and embeds it where `kernelSource(::k)` is called |
-| `kernelin-webgpu` | Kotlin/Wasm WebGPU host: `WebGpu.create()`, `gpu.load(kernelSource(::k))`, `kernel.run(...)` |
+| `kernelin-webgpu` | Kotlin/Wasm WebGPU host: `WebGpu.create()`, `gpu.dispatch(n) { k(...) }`, `gpu.load(kernelSource(::k))`, `kernel.run(...)` |
 | `kernelin-gradle-plugin` | `id("io.github.rajumark.kernelin")`: one-line setup for JVM, Multiplatform and Android projects; `kernelin { enabled = false }` |
 | `samples` | Kernels in `commonMain` (JVM + Wasm), CPU tests and benchmark (JVM), live demo entry points (Wasm) |
 

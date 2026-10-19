@@ -31,3 +31,8 @@ kotlin {
         }
     }
 }
+
+dependencies {
+    // The host tests launch real @Kernel functions, so their compilation runs the compiler plugin.
+    add("kotlinCompilerPluginClasspathWasmJsTest", project(":kernelin-compiler-plugin"))
+}

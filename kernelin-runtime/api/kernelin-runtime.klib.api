@@ -10,6 +10,30 @@ open annotation class io.github.rajumark.kernelin/Kernel : kotlin/Annotation { /
     constructor <init>() // io.github.rajumark.kernelin/Kernel.<init>|<init>(){}[0]
 }
 
+open annotation class io.github.rajumark.kernelin/KernelinGeneratedApi : kotlin/Annotation { // io.github.rajumark.kernelin/KernelinGeneratedApi|null[0]
+    constructor <init>() // io.github.rajumark.kernelin/KernelinGeneratedApi.<init>|<init>(){}[0]
+}
+
+final class io.github.rajumark.kernelin/KernelLaunch { // io.github.rajumark.kernelin/KernelLaunch|null[0]
+    final val arrays // io.github.rajumark.kernelin/KernelLaunch.arrays|{}arrays[0]
+        final fun <get-arrays>(): kotlin.collections/Map<kotlin/String, kotlin/Any> // io.github.rajumark.kernelin/KernelLaunch.arrays.<get-arrays>|<get-arrays>(){}[0]
+    final val scalars // io.github.rajumark.kernelin/KernelLaunch.scalars|{}scalars[0]
+        final fun <get-scalars>(): kotlin.collections/Map<kotlin/String, kotlin/Any> // io.github.rajumark.kernelin/KernelLaunch.scalars.<get-scalars>|<get-scalars>(){}[0]
+    final val source // io.github.rajumark.kernelin/KernelLaunch.source|{}source[0]
+        final fun <get-source>(): io.github.rajumark.kernelin/KernelSource // io.github.rajumark.kernelin/KernelLaunch.source.<get-source>|<get-source>(){}[0]
+
+    final fun argument(kotlin/Int, kotlin/Boolean) // io.github.rajumark.kernelin/KernelLaunch.argument|argument(kotlin.Int;kotlin.Boolean){}[0]
+    final fun argument(kotlin/Int, kotlin/Float) // io.github.rajumark.kernelin/KernelLaunch.argument|argument(kotlin.Int;kotlin.Float){}[0]
+    final fun argument(kotlin/Int, kotlin/FloatArray) // io.github.rajumark.kernelin/KernelLaunch.argument|argument(kotlin.Int;kotlin.FloatArray){}[0]
+    final fun argument(kotlin/Int, kotlin/Int) // io.github.rajumark.kernelin/KernelLaunch.argument|argument(kotlin.Int;kotlin.Int){}[0]
+    final fun argument(kotlin/Int, kotlin/IntArray) // io.github.rajumark.kernelin/KernelLaunch.argument|argument(kotlin.Int;kotlin.IntArray){}[0]
+    final fun kernel(io.github.rajumark.kernelin/KernelSource) // io.github.rajumark.kernelin/KernelLaunch.kernel|kernel(io.github.rajumark.kernelin.KernelSource){}[0]
+
+    final object Companion { // io.github.rajumark.kernelin/KernelLaunch.Companion|null[0]
+        final fun capture(kotlin/Function1<io.github.rajumark.kernelin/KernelLaunch, kotlin/Unit>): io.github.rajumark.kernelin/KernelLaunch // io.github.rajumark.kernelin/KernelLaunch.Companion.capture|capture(kotlin.Function1<io.github.rajumark.kernelin.KernelLaunch,kotlin.Unit>){}[0]
+    }
+}
+
 final class io.github.rajumark.kernelin/KernelManifest { // io.github.rajumark.kernelin/KernelManifest|null[0]
     constructor <init>(kotlin/String, kotlin/String, kotlin/Int, kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param>) // io.github.rajumark.kernelin/KernelManifest.<init>|<init>(kotlin.String;kotlin.String;kotlin.Int;kotlin.collections.List<io.github.rajumark.kernelin.KernelManifest.Param>){}[0]
 

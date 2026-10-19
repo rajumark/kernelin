@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.fir.analysis.checkers.expression.ExpressionCheckers
 import org.jetbrains.kotlin.fir.analysis.checkers.expression.FirExpressionChecker
 import org.jetbrains.kotlin.fir.analysis.extensions.FirAdditionalCheckersExtension
 import org.jetbrains.kotlin.fir.declarations.DirectDeclarationsAccess
+import org.jetbrains.kotlin.fir.declarations.FirAnonymousFunction
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
@@ -33,6 +34,7 @@ import org.jetbrains.kotlin.fir.expressions.FirCheckNotNullCall
 import org.jetbrains.kotlin.fir.expressions.FirElvisExpression
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
 import org.jetbrains.kotlin.fir.expressions.FirLiteralExpression
+import org.jetbrains.kotlin.fir.expressions.FirReturnExpression
 import org.jetbrains.kotlin.fir.expressions.FirSafeCallExpression
 import org.jetbrains.kotlin.fir.expressions.FirStatement
 import org.jetbrains.kotlin.fir.expressions.FirStringConcatenationCall
@@ -92,6 +94,7 @@ class KernelinCheckers(session: FirSession) : FirAdditionalCheckersExtension(ses
     override val declarationCheckers = object : DeclarationCheckers() {
         override val namedFunctionCheckers = setOf(KernelSignatureChecker, KernelHelperCallChecker, HelperFunctionChecker)
         override val propertyCheckers = setOf(KernelVariableChecker)
+        override val anonymousFunctionCheckers = setOf(LaunchBlockChecker)
     }
 
     override val expressionCheckers = object : ExpressionCheckers() {
@@ -284,6 +287,34 @@ private fun libraryError(callee: FirNamedFunctionSymbol, session: FirSession): S
     if (!rejected) return null
     return lambdaError(callee, session)
         ?: "'${id.asSingleFqName()}' can't run on the GPU (only kotlin.math, Int/Float operators and your own functions are supported)"
+}
+
+// ------------------------------------------------------------------------------------------------ launch blocks
+
+/**
+ * A launch block, like `gpu.dispatch(n) { saxpy(alpha = 2f, x = xs, y = ys) }`, must be exactly one call to a
+ * @Kernel function: the plugin records that call for the GPU, so anything else in the block would never run.
+ */
+object LaunchBlockChecker : FirDeclarationChecker<FirAnonymousFunction>(MppCheckerKind.Common) {
+    context(context: CheckerContext, reporter: DiagnosticReporter)
+    override fun check(declaration: FirAnonymousFunction) {
+        if (declaration.receiverParameter?.typeRef?.coneType?.classId != KERNEL_LAUNCH_CLASS) return
+        // The last statement comes wrapped in a return the compiler made up; an empty block holds only that.
+        val statements = declaration.body?.statements.orEmpty()
+            .map { if (it is FirReturnExpression && it.source?.kind is KtFakeSourceElementKind) it.result else it }
+            .filter { it.source != null && it.source?.kind !is KtFakeSourceElementKind }
+        fun isKernelCall(statement: FirStatement) = (statement as? FirFunctionCall)?.calleeReference
+            ?.toResolvedCallableSymbol()?.hasAnnotation(KERNEL_CLASS_ID, context.session) == true
+        if (statements.size == 1 && isKernelCall(statements[0])) return
+        // Point at the first statement that isn't the kernel call (the second one when all are kernel calls).
+        val wrong = statements.firstOrNull { !isKernelCall(it) } ?: statements.getOrNull(1)
+        reporter.reportOn(
+            wrong?.source ?: declaration.source,
+            KernelinErrors.KERNELIN_ERROR,
+            "a launch block must be exactly one call to a @Kernel function, like { saxpy(alpha = 2f, x = xs, y = ys) }; " +
+                "compute other values before the block",
+        )
+    }
 }
 
 // ------------------------------------------------------------------------------------------------ helpers

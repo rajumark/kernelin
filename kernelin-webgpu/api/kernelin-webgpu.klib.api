@@ -71,6 +71,7 @@ final class io.github.rajumark.kernelin.webgpu/WebGpu : kotlin/AutoCloseable { /
         final fun <set-onUncapturedError>(kotlin/Function1<kotlin/String, kotlin/Unit>?) // io.github.rajumark.kernelin.webgpu/WebGpu.onUncapturedError.<set-onUncapturedError>|<set-onUncapturedError>(kotlin.Function1<kotlin.String,kotlin.Unit>?){}[0]
 
     final fun close() // io.github.rajumark.kernelin.webgpu/WebGpu.close|close(){}[0]
+    final suspend fun dispatch(kotlin/Int, kotlin/Function1<io.github.rajumark.kernelin/KernelLaunch, kotlin/Unit>): io.github.rajumark.kernelin.webgpu/GpuResult // io.github.rajumark.kernelin.webgpu/WebGpu.dispatch|dispatch(kotlin.Int;kotlin.Function1<io.github.rajumark.kernelin.KernelLaunch,kotlin.Unit>){}[0]
     final suspend fun load(io.github.rajumark.kernelin/KernelSource): io.github.rajumark.kernelin.webgpu/GpuKernel // io.github.rajumark.kernelin.webgpu/WebGpu.load|load(io.github.rajumark.kernelin.KernelSource){}[0]
 
     final object Companion { // io.github.rajumark.kernelin.webgpu/WebGpu.Companion|null[0]

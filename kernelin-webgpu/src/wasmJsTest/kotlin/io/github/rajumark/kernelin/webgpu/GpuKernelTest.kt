@@ -2,7 +2,9 @@
 
 package io.github.rajumark.kernelin.webgpu
 
+import io.github.rajumark.kernelin.Kernel
 import io.github.rajumark.kernelin.KernelSource
+import io.github.rajumark.kernelin.globalId
 import kotlinx.coroutines.async
 import kotlinx.coroutines.await
 import kotlinx.coroutines.test.runTest
@@ -228,6 +230,36 @@ class GpuKernelTest {
     }
 
     @Test
+    fun typedDispatchSendsTheArgumentsAndWritesResultsBack() = runTest {
+        val gpu = WebGpu.create()
+        // The fake never runs shaders, so it plays the kernel: every int of the 'out' buffer becomes 42.
+        fakeOnDispatchFill(": out", 42)
+        val a = floatArrayOf(1f, 2f, 3f)
+        val out = IntArray(3)
+        val result = gpu.dispatch(3) { scaleInto(factor = 7, on = true, a = a, out = out) }
+        assertContentEquals(intArrayOf(42, 42, 42), out)
+        assertContentEquals(intArrayOf(42, 42, 42), result.ints("out"))
+        assertContentEquals(floatArrayOf(1f, 2f, 3f), a, "Arrays the kernel only reads are left alone")
+        // The uniform holds the size, then the scalars in Kotlin order: factor, on.
+        assertContentEquals(intArrayOf(3, 7, 1), fakeUniform(": scalars").copyOf(3))
+
+        val out2 = IntArray(2)
+        gpu.dispatch(2) { scaleInto(9, false, floatArrayOf(0f, 0f), out2) }
+        assertContentEquals(intArrayOf(42, 42), out2)
+        assertContentEquals(intArrayOf(2, 9, 0), fakeUniform(": scalars").copyOf(3))
+        assertEquals(1, fakeCount("pipeline"), "The kernel is compiled once and reused")
+    }
+
+    @Test
+    fun typedDispatchFailsAfterClose() = runTest {
+        val gpu = WebGpu.create()
+        val out = IntArray(1)
+        gpu.dispatch(1) { scaleInto(1, true, floatArrayOf(1f), out) }
+        gpu.close()
+        assertFailsWith<IllegalStateException> { gpu.dispatch(1) { scaleInto(1, true, floatArrayOf(1f), out) } }
+    }
+
+    @Test
     fun bulkCopiesKeepEveryValue() {
         for (n in listOf(0, 1, 3, 1000)) {
             val ints = IntArray(n) { it * 7919 - 500_000 }.also { if (n > 2) { it[0] = Int.MIN_VALUE; it[1] = Int.MAX_VALUE } }
@@ -240,6 +272,35 @@ class GpuKernelTest {
         assertEquals(-5, readIntForTest(intArrayOf(9, -5).toJsInt32Array(), 1))
     }
 }
+
+@Kernel
+fun scaleInto(factor: Int, on: Boolean, a: FloatArray, out: IntArray) {
+    val i = globalId()
+    if (on) out[i] = (a[i] * factor).toInt()
+}
+
+private fun fakeOnDispatchFill(labelEnd: String, value: Int): Unit = js("""{
+    globalThis.fakeGpu.onDispatch = () => {
+        for (const o of globalThis.fakeGpu.objects) {
+            if (o.kind === 'buffer' && !o.destroyed && o.label.endsWith(labelEnd)) new Int32Array(o.bytes.buffer).fill(value);
+        }
+    };
+}""")
+
+/** The ints of the newest live buffer whose label ends with [labelEnd]. */
+private fun fakeUniform(labelEnd: String): IntArray {
+    val n = fakeBufferInts(labelEnd, -1)
+    return IntArray(n) { fakeBufferInts(labelEnd, it) }
+}
+
+/** With index -1: the number of ints in the buffer; otherwise the int at [index]. */
+private fun fakeBufferInts(labelEnd: String, index: Int): Int = js("""(() => {
+    const b = globalThis.fakeGpu.objects.filter(o => o.kind === 'buffer' && !o.destroyed && o.label.endsWith(labelEnd)).pop();
+    const ints = new Int32Array(b.bytes.buffer);
+    return index < 0 ? ints.length : ints[index];
+})()""")
+
+private fun fakeCount(kind: String): Int = js("globalThis.fakeGpu.objects.filter(o => o.kind === kind).length")
 
 private fun newInt32ArrayForTest(length: Int): JsAny = js("new Int32Array(length)")
 
@@ -337,7 +398,7 @@ private fun installFakeGpu(): Unit = js("""{
             return {
                 beginComputePass(p) {
                     make('computePass', p);
-                    return { setPipeline() {}, setBindGroup() {}, dispatchWorkgroups() {}, end() {} };
+                    return { setPipeline() {}, setBindGroup() {}, dispatchWorkgroups() { ops.push(() => fake.onDispatch && fake.onDispatch()); }, end() {} };
                 },
                 clearBuffer(buffer) { ops.push(() => buffer.bytes.fill(0)); },
                 copyBufferToBuffer(from, fromOffset, to, toOffset, size) {

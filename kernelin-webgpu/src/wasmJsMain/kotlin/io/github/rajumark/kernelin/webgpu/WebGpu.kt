@@ -2,6 +2,7 @@
 
 package io.github.rajumark.kernelin.webgpu
 
+import io.github.rajumark.kernelin.KernelLaunch
 import io.github.rajumark.kernelin.KernelManifest
 import io.github.rajumark.kernelin.KernelSource
 import kotlinx.coroutines.await
@@ -18,6 +19,9 @@ import kotlin.wasm.unsafe.withScopedMemoryAllocator
  *
  * ```
  * val gpu = WebGpu.create()
+ * gpu.dispatch(n) { saxpy(alpha = 2f, x = xs, y = ys) }   // typed: checked by the compiler; ys now holds the result
+ *
+ * // or by name, with more control (data that stays on the GPU, what to read back):
  * val kernel = gpu.load(kernelSource(::mandelbrot))
  * val result = kernel.run(size = w * h, scalars = mapOf("width" to w, ...), buffers = mapOf("out" to GpuData.empty(w * h)))
  * ```
@@ -40,6 +44,10 @@ public class WebGpu private constructor(internal val device: JsAny, public val d
     }
 
     private val kernels = mutableListOf<GpuKernel>()
+
+    /** Kernels loaded by [dispatch], by kernel name, so each is compiled once. */
+    private val launched = HashMap<String, GpuKernel>()
+    private val launchedLock = Mutex()
 
     /** True after [close]. */
     public var isClosed: Boolean = false
@@ -105,6 +113,37 @@ public class WebGpu private constructor(internal val device: JsAny, public val d
         return GpuKernel(this, source, layout, ready, uniform).also { kernels += it }
     }
 
+    /**
+     * Runs one kernel call for ids `0 until size`, with typed arguments:
+     *
+     * ```
+     * gpu.dispatch(n) { saxpy(alpha = 2f, x = xs, y = ys) }
+     * ```
+     *
+     * The block is a normal call to a `@Kernel` function, so the compiler checks parameter names and types, and
+     * the IDE completes them. It does not run on the CPU: the Kernelin compiler plugin records the call (see
+     * [KernelLaunch]), and the kernel runs on the GPU instead. Like `KernelinCpu.dispatch(n) { saxpy(...) }`, the
+     * arrays the kernel writes hold the results afterwards; the returned [GpuResult] has them too.
+     *
+     * The kernel is loaded on the first call and reused after that. Throws like [load] and [GpuKernel.run].
+     */
+    public suspend fun dispatch(size: Int, kernel: KernelLaunch.() -> Unit): GpuResult {
+        val launch = KernelLaunch.capture(kernel)
+        val loaded = launchedLock.withLock {
+            launched[launch.source.name]?.takeUnless { it.isClosed } ?: load(launch.source).also { launched[launch.source.name] = it }
+        }
+        val arrays = launch.arrays
+        val result = loaded.run(size, launch.scalars, arrays.mapValues { (_, array) -> GpuData.ofArray(array) })
+        for (p in loaded.manifest.buffers) {
+            if (!p.isWritten) continue
+            when (val array = arrays.getValue(p.name)) {
+                is IntArray -> result.ints(p.name).copyInto(array)
+                is FloatArray -> result.floats(p.name).copyInto(array)
+            }
+        }
+        return result
+    }
+
     /** Frees every kernel loaded from this device, then the device itself. Safe to call more than once. */
     override fun close() {
         if (isClosed) return
@@ -115,6 +154,7 @@ public class WebGpu private constructor(internal val device: JsAny, public val d
 
     internal fun forget(kernel: GpuKernel) {
         kernels -= kernel
+        if (launched[kernel.source.name] === kernel) launched -= kernel.source.name
     }
 
     internal fun checkUsable() {
@@ -156,6 +196,13 @@ public class GpuData private constructor(
          * never comes back to the CPU. The buffer must come from a kernel of the same [WebGpu].
          */
         public fun of(buffer: GpuBuffer): GpuData = GpuData(null, buffer.length, buffer.type, buffer)
+
+        /** An IntArray or FloatArray argument of a [KernelLaunch]. */
+        internal fun ofArray(array: Any): GpuData = when (array) {
+            is IntArray -> of(array)
+            is FloatArray -> of(array)
+            else -> throw IllegalArgumentException("Kernel arrays must be IntArray or FloatArray, not ${array::class.simpleName}")
+        }
     }
 }
 

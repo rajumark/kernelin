@@ -5,6 +5,23 @@ public final class io/github/rajumark/kernelin/KernelKt {
 	public static final fun globalId ()I
 }
 
+public final class io/github/rajumark/kernelin/KernelLaunch {
+	public static final field Companion Lio/github/rajumark/kernelin/KernelLaunch$Companion;
+	public final fun argument (IF)V
+	public final fun argument (II)V
+	public final fun argument (IZ)V
+	public final fun argument (I[F)V
+	public final fun argument (I[I)V
+	public final fun getArrays ()Ljava/util/Map;
+	public final fun getScalars ()Ljava/util/Map;
+	public final fun getSource ()Lio/github/rajumark/kernelin/KernelSource;
+	public final fun kernel (Lio/github/rajumark/kernelin/KernelSource;)V
+}
+
+public final class io/github/rajumark/kernelin/KernelLaunch$Companion {
+	public final fun capture (Lkotlin/jvm/functions/Function1;)Lio/github/rajumark/kernelin/KernelLaunch;
+}
+
 public final class io/github/rajumark/kernelin/KernelManifest {
 	public static final field Companion Lio/github/rajumark/kernelin/KernelManifest$Companion;
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/List;)V
@@ -50,6 +67,9 @@ public final class io/github/rajumark/kernelin/KernelinCpu {
 	public static final field INSTANCE Lio/github/rajumark/kernelin/KernelinCpu;
 	public final fun dispatch (ILkotlin/jvm/functions/Function0;)V
 	public final fun dispatchParallel (ILkotlin/jvm/functions/Function0;)V
+}
+
+public abstract interface annotation class io/github/rajumark/kernelin/KernelinGeneratedApi : java/lang/annotation/Annotation {
 }
 
 public final class io/github/rajumark/kernelin/KernelinShaders {
