@@ -34,8 +34,13 @@ private val KERNEL_SOURCE_CLASS = ClassId(FqName("io.github.rajumark.kernelin"),
 
 /**
  * Finds every `@Kernel` function and translates it to WGSL. The result is used two ways:
- * - on the JVM it is written next to the classes (`kernelin/<fq.name>.wgsl/.json`), so it ships in the jar;
+ * - it is written to [outputDir] (`<fq.name>.wgsl/.json`). On the JVM that is next to the classes, so it ships
+ *   in the jar; the Gradle plugin gives other platforms their own folder;
  * - on every platform, `kernelSource(::kernel)` calls are replaced by a `KernelSource` holding the shader.
+ *
+ * An incremental build can recompile a file calling `kernelSource(::kernel)` without the file holding the kernel
+ * (for example after a library it uses changed). The kernel then has no body to translate here, so the shader
+ * written to [outputDir] when the kernel was last compiled is used instead.
  */
 class KernelinIrGenerationExtension(
     private val messages: MessageCollector,
@@ -43,7 +48,7 @@ class KernelinIrGenerationExtension(
 ) : IrGenerationExtension {
 
     override fun generate(moduleFragment: IrModuleFragment, pluginContext: IrPluginContext) {
-        val shaders = HashMap<IrSimpleFunction, Pair<String, WgslShader>>()
+        val shaders = HashMap<IrSimpleFunction, CompiledShader>()
         for (file in moduleFragment.files) {
             val kernels = mutableListOf<IrSimpleFunction>()
             file.acceptChildrenVoid(object : IrVisitorVoid() {
@@ -56,12 +61,12 @@ class KernelinIrGenerationExtension(
                     super.visitSimpleFunction(declaration)
                 }
             })
-            for (kernel in kernels) translate(file, kernel)?.let { shaders[kernel] = kernel.kotlinFqName.asString() to it }
+            for (kernel in kernels) translate(file, kernel)?.let { shaders[kernel] = it }
         }
         for (file in moduleFragment.files) embedKernelSources(file, pluginContext, shaders)
     }
 
-    private fun translate(file: IrFile, kernel: IrSimpleFunction): WgslShader? {
+    private fun translate(file: IrFile, kernel: IrSimpleFunction): CompiledShader? {
         val fqName = kernel.kotlinFqName.asString()
         val result = WgslKernelTranslator(kernel).translate()
         if (result.errors.isNotEmpty()) {
@@ -74,7 +79,7 @@ class KernelinIrGenerationExtension(
             }
             return null
         }
-        val shader = result.shader!!
+        val shader = result.shader!!.let { CompiledShader(fqName, it.wgsl, it.manifestJson(fqName)) }
         messages.report(
             CompilerMessageSeverity.INFO,
             "Kernelin: translated @Kernel $fqName to WGSL (${shader.wgsl.lines().size} lines)",
@@ -82,16 +87,25 @@ class KernelinIrGenerationExtension(
         if (outputDir != null) {
             outputDir.mkdirs()
             outputDir.resolve("$fqName.wgsl").writeText(shader.wgsl)
-            outputDir.resolve("$fqName.json").writeText(shader.manifestJson(fqName))
+            outputDir.resolve("$fqName.json").writeText(shader.manifestJson)
         }
         return shader
+    }
+
+    /** The shader written when [kernel] was last compiled in this module (it isn't part of this compilation). */
+    private fun savedShader(kernel: IrFunction): CompiledShader? {
+        if (outputDir == null || kernel.body != null) return null
+        val fqName = kernel.kotlinFqName.asString()
+        val wgsl = outputDir.resolve("$fqName.wgsl").takeIf { it.isFile } ?: return null
+        val manifest = outputDir.resolve("$fqName.json").takeIf { it.isFile } ?: return null
+        return CompiledShader(fqName, wgsl.readText(), manifest.readText())
     }
 
     /** Replaces `kernelSource(::someKernel)` with `KernelSource("<fq name>", "<wgsl>", "<manifest json>")`. */
     private fun embedKernelSources(
         file: IrFile,
         context: IrPluginContext,
-        shaders: Map<IrSimpleFunction, Pair<String, WgslShader>>,
+        shaders: Map<IrSimpleFunction, CompiledShader>,
     ) {
         file.transformChildrenVoid(object : IrElementTransformerVoid() {
             override fun visitCall(expression: IrCall): IrExpression {
@@ -104,17 +118,17 @@ class KernelinIrGenerationExtension(
                     is IrRichCallableReference<*> -> ref.reflectionTargetSymbol?.owner as? IrFunction
                     else -> null
                 }
+                val shader = target?.let { shaders[it] ?: savedShader(it) }
                 val error = when {
                     target == null -> "kernelSource() needs a direct reference to a kernel, like kernelSource(::myKernel)"
                     !target.hasAnnotation(KERNEL_ANNOTATION) -> "'${target.kotlinFqName}' isn't annotated with @Kernel"
-                    target !in shaders -> "'${target.kotlinFqName}' must be a @Kernel from this module that translated without errors"
+                    shader == null -> "'${target.kotlinFqName}' must be a @Kernel from this module that translated without errors"
                     else -> null
                 }
-                if (error != null) {
+                if (error != null || shader == null) {
                     messages.report(CompilerMessageSeverity.ERROR, "Kernelin: $error", file.location(expression))
                     return expression
                 }
-                val (fqName, shader) = shaders.getValue(target as IrSimpleFunction)
                 val constructor = context.referenceClass(KERNEL_SOURCE_CLASS)?.owner?.declarations
                     ?.filterIsInstance<org.jetbrains.kotlin.ir.declarations.IrConstructor>()?.singleOrNull()
                     ?: return expression.also {
@@ -122,9 +136,9 @@ class KernelinIrGenerationExtension(
                     }
                 val builder = DeclarationIrBuilder(context, callee.symbol, expression.startOffset, expression.endOffset)
                 return builder.irCallConstructor(constructor.symbol, emptyList()).apply {
-                    arguments[0] = builder.irString(fqName)
+                    arguments[0] = builder.irString(shader.fqName)
                     arguments[1] = builder.irString(shader.wgsl)
-                    arguments[2] = builder.irString(shader.manifestJson(fqName))
+                    arguments[2] = builder.irString(shader.manifestJson)
                 }
             }
         })
@@ -137,3 +151,6 @@ class KernelinIrGenerationExtension(
         return CompilerMessageLocation.create(fileEntry.name, line + 1, column + 1, null)
     }
 }
+
+/** A translated kernel, as embedded by `kernelSource()`. */
+private class CompiledShader(val fqName: String, val wgsl: String, val manifestJson: String)

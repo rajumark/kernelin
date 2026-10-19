@@ -5,7 +5,9 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
+import org.jetbrains.kotlin.gradle.plugin.InternalSubpluginOption
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilerPluginSupportPlugin
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.plugin.SubpluginArtifact
 import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
 
@@ -76,10 +78,24 @@ public class KernelinGradlePlugin : KotlinCompilerPluginSupportPlugin {
     override fun applyToCompilation(kotlinCompilation: KotlinCompilation<*>): Provider<List<SubpluginOption>> {
         val project = kotlinCompilation.target.project
         val extension = project.extensions.getByType(KernelinExtension::class.java)
-        return extension.enabled.map { listOf(SubpluginOption("enabled", it.toString())) }
+        // The JVM writes shaders next to the classes. Other platforms get their own folder, so that an incremental
+        // build that recompiles kernelSource(::kernel) without the kernel's file can reuse the kernel's shader.
+        val shaderDir = if (kotlinCompilation.platformType in KLIB_PLATFORMS) {
+            project.layout.buildDirectory.dir("kernelin/${kotlinCompilation.target.name}/${kotlinCompilation.name}")
+                .also { dir -> kotlinCompilation.compileTaskProvider.configure { it.outputs.dir(dir) } }
+        } else null
+        return extension.enabled.map { enabled ->
+            listOfNotNull(
+                SubpluginOption("enabled", enabled.toString()),
+                // Internal: an absolute path must not be part of the task's build cache key.
+                shaderDir?.let { InternalSubpluginOption("outputDir", it.get().asFile.absolutePath) },
+            )
+        }
     }
 
     private companion object {
+        val KLIB_PLATFORMS = setOf(KotlinPlatformType.js, KotlinPlatformType.wasm, KotlinPlatformType.native)
+
         val ANDROID_PLUGIN_IDS = listOf(
             "org.jetbrains.kotlin.android",
             "com.android.application",

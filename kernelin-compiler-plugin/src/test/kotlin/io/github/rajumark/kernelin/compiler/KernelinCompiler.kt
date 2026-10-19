@@ -8,7 +8,7 @@ import java.io.PrintStream
 import java.nio.file.Files
 
 /** Result of compiling Kotlin sources with the real compiler and the packaged Kernelin plugin. */
-class Compilation(val exitCode: ExitCode, val output: String, private val outDir: File) {
+class Compilation(val exitCode: ExitCode, val output: String, val outDir: File) {
     val ok get() = exitCode == ExitCode.OK
 
     fun wgsl(kernel: String): String = outDir.resolve("kernelin/$kernel.wgsl").readText()
@@ -28,16 +28,18 @@ object KernelinCompiler {
     private val pluginJar = System.getProperty("kernelin.pluginJar")
         ?: error("kernelin.pluginJar is not set; run the tests through Gradle")
 
-    fun compile(source: String, fileName: String = "Kernels.kt"): Compilation {
+    /** Compiles [source] alone; with [out] from an earlier compilation, like an incremental build does. */
+    fun compile(source: String, fileName: String = "Kernels.kt", out: File? = null): Compilation {
         val dir = Files.createTempDirectory("kernelin-test").toFile()
         val src = dir.resolve("src/$fileName").apply { parentFile.mkdirs(); writeText(source) }
-        val out = dir.resolve("out").apply { mkdirs() }
+        val classpath = listOfNotNull(out?.path, System.getProperty("java.class.path")).joinToString(File.pathSeparator)
+        val out = out ?: dir.resolve("out").apply { mkdirs() }
         val buffer = ByteArrayOutputStream()
         val exit = K2JVMCompiler().exec(
             PrintStream(buffer),
             src.path,
             "-d", out.path,
-            "-classpath", System.getProperty("java.class.path"),
+            "-classpath", classpath,
             "-no-stdlib", "-no-reflect",
             "-jvm-target", "21",
             "-module-name", "kernelin_test",

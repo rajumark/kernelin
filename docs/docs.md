@@ -710,7 +710,7 @@ On main, GPU differential tests also run kernels as Kotlin on the CPU and as WGS
 
 ```bash
 brew install deno
-scripts/check-incremental.sh                   # checks incremental builds never keep a stale shader
+scripts/check-incremental.sh                   # checks incremental builds (JVM, JS, Wasm) use the current shader
 ```
 
 Quality checks, all part of `gradle build`:

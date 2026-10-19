@@ -21,6 +21,13 @@ Fixes (the GPU now matches Kotlin in all of these):
 - `Float.pow` with a negative base (`(-2f).pow(3f) == -8f`) or a zero base: WGSL leaves these undefined, and
   Vulkan GPUs return NaN. Kernelin now handles the sign and the special cases itself, like Kotlin.
 
+Build fixes:
+- Incremental builds: when only the file calling `kernelSource(::k)` was recompiled, without the file holding
+  `@Kernel k` (for example after a library it uses changed), the build failed with "'k' must be a @Kernel from this
+  module". `kernelSource()` now uses the shader saved when `k` was last compiled. On JS, Wasm and Native the Gradle
+  plugin saves shaders in `build/kernelin/<target>/<compilation>`; the JVM keeps them next to the classes.
+  `scripts/check-incremental.sh` now checks this on the JVM, Kotlin/JS and Kotlin/Wasm, and CI runs it.
+
 WebGPU host:
 - `GpuData.empty(n)` is zero-filled on every run, as documented. Before, a run that reused the GPU buffer of an
   earlier run of the same size started from that run's results.

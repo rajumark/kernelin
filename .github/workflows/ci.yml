@@ -56,7 +56,7 @@ jobs:
       - name: Coverage report and minimum
         run: ./gradlew koverXmlReport koverVerify
 
-      - name: Incremental builds pick up kernel changes
+      - name: Incremental builds pick up kernel changes (JVM, JS, Wasm)
         run: scripts/check-incremental.sh
 
       - name: Example - plain JVM project using the Gradle plugin

@@ -145,6 +145,32 @@ class WgslTranslationTest {
     }
 
     @Test
+    fun `kernelSource uses the saved shader when only the calling file is recompiled`() {
+        // An incremental build recompiles Main.kt alone: fill comes from the earlier output, without a body.
+        val kernels = compileOk(
+            """
+            @Kernel
+            fun fill(out: FloatArray, value: Float) {
+                out[globalId()] = value
+            }
+            """,
+        )
+        val caller = "import io.github.rajumark.kernelin.*\n\nfun source(): KernelSource = kernelSource(::fill)"
+        val withoutShaders = kernels.outDir.resolveSibling("without-shaders")
+        kernels.outDir.copyRecursively(withoutShaders)
+        withoutShaders.resolve("kernelin").deleteRecursively()
+        val c = KernelinCompiler.compile(caller, "Main.kt", out = kernels.outDir)
+        if (!c.ok) fail("Compilation failed:\n${c.output}")
+        val source = c.loadClass("MainKt").getMethod("source").invoke(null) as io.github.rajumark.kernelin.KernelSource
+        assertEquals(kernels.wgsl("fill"), source.wgsl)
+        assertEquals(kernels.manifest("fill"), source.manifestJson)
+
+        // Without the saved shader there is nothing to embed: a clear error, not a wrong shader.
+        val missing = KernelinCompiler.compile(caller, "Main.kt", out = withoutShaders)
+        assertContains(missing.errors.joinToString("\n"), "'fill' must be a @Kernel from this module")
+    }
+
+    @Test
     fun `kernelSource rejects functions that are not kernels`() {
         val c = compileError("fun plain(x: Int) = x\nfun source() = kernelSource(::plain)")
         assertContains(c.errors.joinToString("\n"), "'plain' isn't annotated with @Kernel")
