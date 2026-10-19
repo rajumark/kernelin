@@ -1,3 +1,8 @@
+public abstract class io/github/rajumark/kernelin/gradle/KernelinExtension {
+	public fun <init> ()V
+	public abstract fun getEnabled ()Lorg/gradle/api/provider/Property;
+}
+
 public final class io/github/rajumark/kernelin/gradle/KernelinGradlePlugin : org/jetbrains/kotlin/gradle/plugin/KotlinCompilerPluginSupportPlugin {
 	public fun <init> ()V
 	public synthetic fun apply (Ljava/lang/Object;)V

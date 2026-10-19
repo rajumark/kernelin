@@ -20,6 +20,16 @@ subprojects {
             publishToMavenCentral()
             if (providers.gradleProperty("signingInMemoryKey").isPresent) signAllPublications()
         }
+        // A local Maven repository for the Gradle plugin's functional tests: they build real projects that
+        // resolve Kernelin from here, exactly like users resolve it from Maven Central.
+        extensions.configure<PublishingExtension> {
+            repositories {
+                maven {
+                    name = "functionalTest"
+                    url = uri(rootProject.layout.buildDirectory.dir("functional-test-repo"))
+                }
+            }
+        }
     }
 }
 

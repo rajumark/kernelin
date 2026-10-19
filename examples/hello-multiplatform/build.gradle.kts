@@ -18,4 +18,12 @@ kotlin {
         browser()
         binaries.executable()
     }
+    // Kotlin/JS and Kotlin/Native: the kernel runs on the CPU, and kernelSource() still gives its WGSL.
+    js {
+        nodejs()
+        binaries.executable()
+    }
+    listOf(macosArm64(), linuxX64()).forEach {
+        it.binaries.executable { entryPoint = "hello.main" }
+    }
 }

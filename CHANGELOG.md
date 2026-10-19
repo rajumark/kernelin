@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+More platforms:
+- `kernelin-runtime` now also targets Kotlin/JS (browser and Node.js) and Kotlin/Native (`macosArm64`, `iosArm64`,
+  `iosSimulatorArm64`, `iosX64`, `tvosArm64`, `tvosSimulatorArm64`, `watchosArm32`, `watchosArm64`,
+  `watchosSimulatorArm64`, `linuxX64`, `linuxArm64`, `mingwX64`). Multiplatform projects with these targets can keep
+  kernels in `commonMain`, run them with `KernelinCpu` and get their WGSL with `kernelSource(::k)`.
+- The Gradle plugin adds `kernelin-runtime` to Android projects too: with the Kotlin Android plugin, with AGP 9's
+  built-in Kotlin (`com.android.application` / `com.android.library` alone) and with
+  `com.android.kotlin.multiplatform.library`. Before, Android projects got the compiler plugin but no runtime.
+- New `kernelin { enabled = false }` Gradle setting turns the compiler plugin off.
+- The Gradle plugin has functional tests (Gradle TestKit) that build JVM, Multiplatform and Android projects.
+
 Fixes (the GPU now matches Kotlin in all of these):
 - An `if` / `when` used as a value ran every branch on the GPU (it became `select()`), so a helper that writes an
   array ran even in branches Kotlin skips. Branches with side effects or setup code now become a real `if`.

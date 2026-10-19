@@ -14,6 +14,14 @@ kotlin {
     abiValidation()
     jvmToolchain(21)
     jvm()
+    // Kotlin/JS: kernels run on the CPU with KernelinCpu (the WebGPU host is Wasm only for now).
+    js {
+        browser {
+            // Common tests run on Node.js; browser tests would need a headless Chrome.
+            testTask { enabled = false }
+        }
+        nodejs()
+    }
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser {
@@ -21,6 +29,20 @@ kotlin {
             testTask { enabled = false }
         }
     }
+    // Kotlin/Native: every tier 1 and 2 target, plus Windows. Apple targets build only on macOS;
+    // Gradle skips them elsewhere and the api/ dump keeps their ABI.
+    macosArm64()
+    iosArm64()
+    iosSimulatorArm64()
+    iosX64()
+    tvosArm64()
+    tvosSimulatorArm64()
+    watchosArm32()
+    watchosArm64()
+    watchosSimulatorArm64()
+    linuxX64()
+    linuxArm64()
+    mingwX64()
 
     sourceSets {
         commonTest.dependencies {
@@ -35,4 +57,10 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// tvOS and watchOS share the native code tested on macOS and the iOS simulator; their simulators are often
+// not installed (Xcode downloads them separately), so don't make the build depend on them.
+tasks.matching { it.name == "tvosSimulatorArm64Test" || it.name == "watchosSimulatorArm64Test" }.configureEach {
+    enabled = false
 }

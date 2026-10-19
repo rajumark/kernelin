@@ -9,10 +9,10 @@ Kernelin is a K2 compiler plugin that turns plain Kotlin `@Kernel` functions int
 
 | Module | Role |
 |---|---|
-| `kernelin-runtime` | Multiplatform (JVM + Wasm): `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` |
+| `kernelin-runtime` | Multiplatform (JVM, JS, Wasm, Native): `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` |
 | `kernelin-compiler-plugin` | `KernelinIrGenerationExtension` finds kernels; `WgslKernelTranslator` turns IR into WGSL |
 | `kernelin-webgpu` | Kotlin/Wasm WebGPU host (`WebGpu`, `GpuKernel`, `GpuData`) |
-| `kernelin-gradle-plugin` | Plugin id `io.github.rajumark.kernelin` |
+| `kernelin-gradle-plugin` | Plugin id `io.github.rajumark.kernelin`; TestKit tests in `src/functionalTest` (`functionalTest` task) |
 | `samples`, `examples` | Sample kernels, benchmark, live demo; standalone example projects |
 | `docs` | GitHub Pages site: `index.html` (landing), `docs.html` + `docs.md` (documentation), `llms.txt`, `demo/` |
 
@@ -21,7 +21,8 @@ Kernelin is a K2 compiler plugin that turns plain Kotlin `@Kernel` functions int
 - JDK 21 and Kotlin 2.4.21. Use the installed `gradle` (`gradle build`).
 - Compiler tests validate every generated shader with `naga` when it is on the PATH (`cargo install naga-cli`).
 - GPU tests need Deno (`brew install deno`); without it they are skipped locally. CI runs them on llvmpipe.
-- CI (`.github/workflows/ci.yml`) builds, tests, fuzzes and runs both examples.
+- CI (`.github/workflows/ci.yml`) builds, tests, fuzzes and runs both examples; a macOS job runs the Apple targets.
+- The Gradle plugin's functional tests build Android projects only when `ANDROID_HOME` points to an Android SDK.
 
 ## Rules
 

@@ -1,6 +1,6 @@
 package io.github.rajumark.kernelin
 
-/** Wasm runs on one thread, so the current id is a plain field. */
+/** JS and Wasm run on one thread, so the current id is a plain field. */
 public actual object KernelinCpu {
     private var current = -1
 

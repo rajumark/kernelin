@@ -2,7 +2,7 @@
 
 Kernelin lets you write GPU compute kernels in plain Kotlin. A K2 compiler plugin translates every function marked `@Kernel` into a WGSL compute shader. The shader runs on any GPU through WebGPU, and the original function stays normal Kotlin, so it also runs on the CPU for unit tests.
 
-> This page describes **Kernelin 0.2.0**, built for **Kotlin 2.4.21**. Features marked **(0.2.0)** are new in this release. The same text is available as plain Markdown at [`docs.md`](docs.md) for tools and AI agents.
+> This page describes **Kernelin 0.2.0**, built for **Kotlin 2.4.21**. Features marked **(0.2.0)** are new in this release; **(next release)** marks what is on `main` but not yet on Maven Central. The same text is available as plain Markdown at [`docs.md`](docs.md) for tools and AI agents.
 
 ```kotlin
 @Kernel
@@ -17,7 +17,7 @@ fun saxpy(alpha: Float, x: FloatArray, y: FloatArray) {
 | **What it is** | A Kotlin compiler plugin + a small runtime + a WebGPU host |
 | **Input** | Top-level Kotlin functions marked `@Kernel` |
 | **Output** | A WGSL compute shader and a JSON manifest per kernel, embedded in your program |
-| **Runs on** | Any WebGPU GPU (Metal, Vulkan, Direct3D 12) from Kotlin/Wasm; the CPU on JVM and Wasm |
+| **Runs on** | Any WebGPU GPU (Metal, Vulkan, Direct3D 12) from Kotlin/Wasm; the CPU on JVM, Android, JS, Wasm and Native |
 | **License** | Apache 2.0 |
 
 ## Quick start
@@ -41,12 +41,13 @@ Then apply the Gradle plugin next to the Kotlin plugin:
 ```kotlin
 // build.gradle.kts
 plugins {
-    kotlin("jvm") version "2.4.21"          // or kotlin("multiplatform")
+    kotlin("jvm") version "2.4.21"          // or kotlin("multiplatform"), or an Android plugin
     id("io.github.rajumark.kernelin") version "0.2.0"
 }
 ```
 
 That's all. The Gradle plugin runs the compiler plugin on every Kotlin compilation and adds the runtime library for you.
+See [Supported platforms](#supported-platforms) for Android and the other Kotlin targets.
 
 ### 2. Write a kernel
 
@@ -92,7 +93,7 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 
 | Artifact | What it is |
 |---|---|
-| `io.github.rajumark:kernelin-runtime:0.2.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` (JVM + Wasm) |
+| `io.github.rajumark:kernelin-runtime:0.2.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` (JVM, JS, Wasm, Native; see below) |
 | `io.github.rajumark:kernelin-webgpu:0.2.0` | Kotlin/Wasm WebGPU host: `WebGpu`, `GpuKernel`, `GpuData`, `GpuResult` |
 | `io.github.rajumark:kernelin-compiler-plugin:0.2.0` | The K2 compiler plugin (added by the Gradle plugin) |
 | `io.github.rajumark:kernelin-gradle-plugin:0.2.0` | Gradle plugin with id `io.github.rajumark.kernelin` |
@@ -102,10 +103,40 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 - Runs `kernelin-compiler-plugin` on every Kotlin compilation in the project.
 - **Kotlin JVM projects:** adds `kernelin-runtime` to `implementation`.
 - **Kotlin Multiplatform projects:** adds `kernelin-runtime` to `commonMain`, and `kernelin-webgpu` to `wasmJsMain` when a `wasmJs` target exists.
+  This includes Android targets made with `com.android.kotlin.multiplatform.library`.
+- **Android projects (next release):** adds `kernelin-runtime` to `implementation`, both with the Kotlin Android
+  plugin (`org.jetbrains.kotlin.android`) and with AGP 9's built-in Kotlin (only `com.android.application` or
+  `com.android.library`). With built-in Kotlin, make sure the Kotlin Gradle plugin is version 2.4.21 (for example
+  `classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21")` in `buildscript`).
+
+### Supported platforms
+
+| Platform | Kernels run on the CPU (`KernelinCpu`) | `kernelSource(::k)` (WGSL) | GPU host in Kernelin |
+|---|---|---|---|
+| JVM | yes, also on all cores with `dispatchParallel` | yes | no (use the WGSL with your own WebGPU host) |
+| Android (JVM artifact) | yes | yes | no |
+| Kotlin/Wasm (`wasmJs`) | yes | yes | yes: `kernelin-webgpu` |
+| Kotlin/JS (`js`, browser and Node.js) **(next release)** | yes | yes | no |
+| Kotlin/Native **(next release)**: `macosArm64`, `iosArm64`, `iosSimulatorArm64`, `iosX64`, `tvosArm64`, `tvosSimulatorArm64`, `watchosArm32`, `watchosArm64`, `watchosSimulatorArm64`, `linuxX64`, `linuxArm64`, `mingwX64` | yes, on the calling thread | yes | no |
+
+Kernels in `commonMain` compile for every target above. The compiler plugin runs on all of them, so a kernel that
+the GPU can't run is a compile error everywhere, not only on the Wasm target.
+
+### Gradle settings **(next release)**
+
+```kotlin
+// build.gradle.kts
+kernelin {
+    enabled = false   // default true; turns the compiler plugin off (kernels still run on the CPU)
+}
+```
+
+With `enabled = false`, `@Kernel` functions are not translated and `kernelSource(::k)` throws at run time.
 
 ### Kotlin Multiplatform setup
 
-Put kernels in `commonMain` so every target shares them: the JVM runs them on the CPU, and the Wasm target runs them on the GPU.
+Put kernels in `commonMain` so every target shares them: the JVM, JS and Native targets run them on the CPU, and the Wasm
+target runs them on the GPU.
 
 ```kotlin
 // build.gradle.kts
@@ -516,7 +547,7 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 
 | Function | Platforms | Description |
 |---|---|---|
-| `dispatch(size) { ... }` | JVM, Wasm | Runs the block once per id in `0 until size` on the calling thread |
+| `dispatch(size) { ... }` | all (JVM, JS, Wasm, Native) | Runs the block once per id in `0 until size` on the calling thread |
 | `dispatchParallel(size) { ... }` | JVM | Same, split across all CPU cores |
 
 ### `KernelinShaders` (JVM)
@@ -650,7 +681,7 @@ To run a kernel from any WebGPU host: write `size` and the scalars (little-endia
 
 | Module | What it is |
 |---|---|
-| `kernelin-runtime` | Multiplatform (JVM + Wasm): `@Kernel`, `globalId()`, `KernelinCpu`, `kernelSource`, `KernelManifest` |
+| `kernelin-runtime` | Multiplatform (JVM, JS, Wasm, Native): `@Kernel`, `globalId()`, `KernelinCpu`, `kernelSource`, `KernelManifest` |
 | `kernelin-compiler-plugin` | K2 compiler plugin; `WgslKernelTranslator` turns Kotlin IR into WGSL |
 | `kernelin-webgpu` | Kotlin/Wasm WebGPU host |
 | `kernelin-gradle-plugin` | `id("io.github.rajumark.kernelin")` |

@@ -40,6 +40,8 @@ jobs:
       - name: Check WebGPU sees a GPU
         run: deno run --unstable-webgpu --allow-read --allow-write --allow-env kernelin-compiler-plugin/src/test/js/gpu-run.mjs --probe
 
+      # Also runs the Gradle plugin's functional tests; the runner's preinstalled Android SDK (ANDROID_HOME)
+      # lets the Android ones run too. Linux and Windows native targets compile here; Apple ones in the macos job.
       - name: Build and test (GPU tests required)
         env:
           KERNELIN_REQUIRE_GPU: "1"
@@ -61,6 +63,28 @@ jobs:
         working-directory: examples/hello-jvm
         run: ../../gradlew run --stacktrace
 
-      - name: Example - Multiplatform project (JVM + Wasm)
+      - name: Example - Multiplatform project (JVM, Wasm, JS, Linux native)
         working-directory: examples/hello-multiplatform
-        run: ../../gradlew jvmRun compileProductionExecutableKotlinWasmJs --stacktrace
+        run: ../../gradlew jvmRun compileProductionExecutableKotlinWasmJs jsNodeDevelopmentRun runDebugExecutableLinuxX64 --stacktrace
+
+  # Apple targets only build on macOS: run the runtime's common tests on macOS and the iOS simulator, and the
+  # Multiplatform example as a macOS program (the compiler plugin must work for Kotlin/Native).
+  apple:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Runtime tests on Apple targets
+        run: ./gradlew :kernelin-runtime:macosArm64Test :kernelin-runtime:iosSimulatorArm64Test :kernelin-runtime:checkKotlinAbi --stacktrace
+
+      - name: Example - Multiplatform project on macOS
+        working-directory: examples/hello-multiplatform
+        run: ../../gradlew runDebugExecutableMacosArm64 --stacktrace
