@@ -2,7 +2,7 @@
 
 > Kernelin is a K2 compiler plugin for Kotlin 2.4.21. It translates plain Kotlin functions marked @Kernel into WGSL compute shaders that run on any GPU through WebGPU. The same functions still run on the CPU (KernelinCpu) for unit tests. Version 0.2.0 is on Maven Central (group io.github.rajumark, Gradle plugin id io.github.rajumark.kernelin).
 
-Key rules for writing a kernel: top-level function, returns Unit, parameters only FloatArray / IntArray / Int / Float / Boolean, start with `val i = globalId()`, write results into an array at index i, Float literals with `f`, no Double / Long / String / lambdas (except repeat) / recursion / classes / nullable types, math only from kotlin.math (Float versions). Run it with `KernelinCpu.dispatch(size) { kernel(...) }` on the CPU, or `WebGpu.create().load(kernelSource(::kernel)).run(size, scalars, buffers)` on the GPU from Kotlin/Wasm.
+Key rules for writing a kernel: top-level function, returns Unit, parameters only FloatArray / IntArray / Int / Float / Boolean, start with `val i = globalId()`, write results into an array at index i, Float literals with `f`, no Double / Long / String / lambdas (except repeat) / recursion / classes / nullable types, math only from kotlin.math (Float versions). Run it with `KernelinCpu.dispatch(size) { kernel(...) }` on the CPU, or `WebGpu.create().load(kernelSource(::kernel)).run(size, scalars, buffers)` on the GPU from Kotlin/Wasm (add `readBack = emptySet()` and pass `GpuData.of(result.buffer(name))` to the next run to keep data on the GPU; `load` and `run` throw `GpuException` on WebGPU errors or a lost device; `close()` frees GPU memory).
 
 ## Docs
 

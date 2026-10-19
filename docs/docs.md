@@ -344,13 +344,59 @@ suspend fun runSaxpy(x: FloatArray, y: FloatArray): FloatArray {
 - Use `GpuData.empty(n)` for pure outputs, so nothing is uploaded. It starts from zeros on every run (unreleased;
   before, a second run of the same size kept the previous run's values).
 - Only arrays the kernel writes (`read_write`) are copied back. Read them with `result.floats(name)` or `result.ints(name)`.
+  Pass `readBack = setOf("out")` to copy back only some of them, or `emptySet()` for none (unreleased).
 - `result.millis` is the time from upload until the results are back.
+- Runs of one `GpuKernel` never overlap: if you call `run` again before the first one finished, the second waits
+  (unreleased; before, the two runs shared GPU buffers and one of them failed).
+- When WebGPU reports an error (out of GPU memory, a rejected command, a lost device), `run` and `load` throw
+  `GpuException` with the browser's message (unreleased; before, errors only appeared in the browser console).
+  Every GPU buffer, pipeline and bind group has a label like `my.pkg.blur: out`, so browser messages name the
+  kernel and the parameter.
+
+### Keep data on the GPU (unreleased)
+
+Copying data to the CPU and back is often slower than the kernel itself. To run several kernels one after the
+other, keep the data on the GPU: skip the read back with `readBack`, take the buffer with `result.buffer(name)`
+and pass it to the next run with `GpuData.of(buffer)`. The data is copied on the GPU, never through the CPU.
+
+```kotlin
+var cells = GpuData.of(start)                                  // uploaded once
+repeat(100) {
+    val step = life.run(n, mapOf("width" to w), mapOf("cells" to cells, "next" to GpuData.empty(n)), readBack = emptySet())
+    cells = GpuData.of(step.buffer("next"))                    // stays on the GPU
+}
+val last = life.run(n, mapOf("width" to w), mapOf("cells" to cells, "next" to GpuData.empty(n)))
+val result = last.ints("next")                                 // one copy back at the end
+```
+
+A `GpuBuffer` is the kernel's own buffer, so it is valid only until that kernel runs again or is closed (check
+`isValid`); using an older one throws `IllegalStateException`. Pass it on before the next run of its kernel, as
+above. It must come from a kernel of the same `WebGpu`.
+
+### Lost devices and cleaning up (unreleased)
+
+The browser can take the GPU away at any time (a driver update, a GPU reset, too many tabs). Then `gpu.isLost` is
+true, `gpu.onLost` is called with the reason, and every `load` and `run` throws `GpuException`. Create a new
+`WebGpu` and load the kernels again:
+
+```kotlin
+gpu.onLost = { reason -> console.log("GPU lost: $reason"); scope.launch { gpu = WebGpu.create(); kernel = gpu.load(source) } }
+gpu.onUncapturedError = { message -> console.log("WebGPU error: $message") }  // errors outside load and run
+```
+
+`kernel.close()` frees the kernel's GPU buffers; `gpu.close()` frees every kernel and the device. Both are
+`AutoCloseable`, so `use { }` works. A `run` after `close` throws `IllegalStateException`.
 
 ### Performance tips
 
 - **Create once, run many.** `WebGpu.create()` and `gpu.load(...)` are slow; `kernel.run(...)` is fast. Keep the `GpuKernel` and call `run` again; GPU buffers are reused when sizes match.
 - **Do enough work per element.** Copying data to the GPU and back costs time. Light kernels (one add per element) can be slower end-to-end than the CPU; heavy math wins big (see the benchmarks on the home page).
 - **Use `GpuData.ofJs(typedArray)`** to pass an existing JS `Float32Array` without a copy, and `result.js(name)` to get the output typed array without a copy.
+- **Keep data on the GPU** between kernels: `readBack = emptySet()` and `GpuData.of(result.buffer(name))` (see
+  [Keep data on the GPU](#keep-data-on-the-gpu-unreleased)). Read back only what you need, once, at the end.
+- **Copies between Kotlin arrays and the GPU are bulk copies** (unreleased): `GpuData.of(FloatArray)`,
+  `result.floats(name)` and `toJsFloat32Array()` copy 4M floats in about 3 ms in Node (before: about 20 ms,
+  one element at a time). `ofJs` / `js` still avoid even that copy.
 
 ### Differences between CPU and GPU
 
@@ -487,14 +533,19 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `WebGpu.isSupported` | `true` when the browser exposes `navigator.gpu` |
 | `suspend WebGpu.create()` | Requests a GPU device. Throws `UnsupportedOperationException` without WebGPU |
 | `description` | Human-readable GPU description |
-| `suspend load(source)` | Compiles the shader and pipeline. Throws if the browser rejects the WGSL |
+| `suspend load(source)` | Compiles the shader and pipeline. Throws if the browser rejects the WGSL, `GpuException` if it rejects the pipeline |
+| `isLost`, `lostReason` | Whether the browser took the device away, and why **(unreleased)** |
+| `onLost` | Called once with the reason when the device is lost (not after `close()`) **(unreleased)** |
+| `onUncapturedError` | Called with WebGPU errors that happen outside `load` and `run` **(unreleased)** |
+| `close()`, `isClosed` | Frees every kernel and the device; `AutoCloseable` **(unreleased)** |
 
 ### `GpuKernel`
 
 | Member | Description |
 |---|---|
 | `source`, `manifest` | What this kernel was built from |
-| `suspend run(size, scalars, buffers)` | Uploads inputs, dispatches `size` threads, reads back `read_write` buffers |
+| `suspend run(size, scalars, buffers, readBack = null)` | Uploads inputs, dispatches `size` threads, reads back the `read_write` buffers named in `readBack` (null: all). Runs of one kernel wait for each other. Throws `GpuException` on WebGPU errors |
+| `close()`, `isClosed` | Frees the kernel's GPU buffers; later runs throw `IllegalStateException`. `AutoCloseable` **(unreleased)** |
 
 ### `GpuData`
 
@@ -503,6 +554,7 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `GpuData.of(FloatArray)` / `GpuData.of(IntArray)` | Upload these values |
 | `GpuData.empty(length)` | Output only, nothing uploaded; zero-filled on every run |
 | `GpuData.ofJs(typedArray)` | Wrap an existing JS typed array without copying |
+| `GpuData.of(GpuBuffer)` | Use a buffer already on the GPU (from `result.buffer(name)`); copied on the GPU **(unreleased)** |
 
 ### `GpuResult`
 
@@ -511,6 +563,19 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `millis` | Time from upload until results were back |
 | `floats(name)` / `ints(name)` | Copy an output buffer into a Kotlin array |
 | `js(name)` | The raw JS typed array, no copy |
+| `buffer(name)` | The kernel's `GpuBuffer` for parameter `name` after this run, still on the GPU **(unreleased)** |
+
+### `GpuBuffer` **(unreleased)**
+
+| Member | Description |
+|---|---|
+| `name`, `length` | The kernel parameter and its number of elements |
+| `isValid` | `false` once its kernel ran again or was closed; then passing it to `run` throws `IllegalStateException` |
+
+### `GpuException` **(unreleased)**
+
+Thrown by `load` and `run` when WebGPU reports an error: a validation error, out of GPU memory, a rejected
+pipeline, or a lost device. The message is the browser's, with the kernel name.
 
 ## How the compiler works
 
@@ -656,6 +721,12 @@ gradle :samples:exportDemo                     # rebuild the live demo into docs
 **`Unknown scalar parameter` / `Unknown buffer parameter`** — A name in `scalars` or `buffers` isn't a parameter of the kernel (often a typo). The message lists the real names.
 
 **`Scalar parameter 'x' is Int, but got Float` / `Buffer parameter 'x' is IntArray, but got FloatArray data`** — Pass values of the parameter's Kotlin type, e.g. `GpuData.of(IntArray)` for an `IntArray` parameter.
+
+**`GpuException: The GPU device was lost`** — The browser reset the GPU. Create a new `WebGpu` and load the kernels again; set `gpu.onLost` to find out right away.
+
+**`GpuException: WebGPU rejected the run ... out of memory`** — The buffers don't fit in GPU memory. Use smaller sizes, or `close()` kernels you no longer need.
+
+**`GpuBuffer 'x' ... is out of date`** — Its kernel ran again, so the buffer now holds newer data. Use `buffer(name)` from the latest result.
 
 **GPU and CPU results differ slightly** — GPUs use 32-bit floats with slightly different rounding for some math functions. Compare floats with a tolerance. See [Differences between CPU and GPU](#differences-between-cpu-and-gpu), especially division by zero.
 

@@ -6,37 +6,71 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.rajumark:kernelin-webgpu>
+final class io.github.rajumark.kernelin.webgpu/GpuBuffer { // io.github.rajumark.kernelin.webgpu/GpuBuffer|null[0]
+    final val isValid // io.github.rajumark.kernelin.webgpu/GpuBuffer.isValid|{}isValid[0]
+        final fun <get-isValid>(): kotlin/Boolean // io.github.rajumark.kernelin.webgpu/GpuBuffer.isValid.<get-isValid>|<get-isValid>(){}[0]
+    final val length // io.github.rajumark.kernelin.webgpu/GpuBuffer.length|{}length[0]
+        final fun <get-length>(): kotlin/Int // io.github.rajumark.kernelin.webgpu/GpuBuffer.length.<get-length>|<get-length>(){}[0]
+    final val name // io.github.rajumark.kernelin.webgpu/GpuBuffer.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.rajumark.kernelin.webgpu/GpuBuffer.name.<get-name>|<get-name>(){}[0]
+}
+
 final class io.github.rajumark.kernelin.webgpu/GpuData { // io.github.rajumark.kernelin.webgpu/GpuData|null[0]
     final object Companion { // io.github.rajumark.kernelin.webgpu/GpuData.Companion|null[0]
         final fun empty(kotlin/Int): io.github.rajumark.kernelin.webgpu/GpuData // io.github.rajumark.kernelin.webgpu/GpuData.Companion.empty|empty(kotlin.Int){}[0]
+        final fun of(io.github.rajumark.kernelin.webgpu/GpuBuffer): io.github.rajumark.kernelin.webgpu/GpuData // io.github.rajumark.kernelin.webgpu/GpuData.Companion.of|of(io.github.rajumark.kernelin.webgpu.GpuBuffer){}[0]
         final fun of(kotlin/FloatArray): io.github.rajumark.kernelin.webgpu/GpuData // io.github.rajumark.kernelin.webgpu/GpuData.Companion.of|of(kotlin.FloatArray){}[0]
         final fun of(kotlin/IntArray): io.github.rajumark.kernelin.webgpu/GpuData // io.github.rajumark.kernelin.webgpu/GpuData.Companion.of|of(kotlin.IntArray){}[0]
         final fun ofJs(kotlin.js/JsAny): io.github.rajumark.kernelin.webgpu/GpuData // io.github.rajumark.kernelin.webgpu/GpuData.Companion.ofJs|ofJs(kotlin.js.JsAny){}[0]
     }
 }
 
-final class io.github.rajumark.kernelin.webgpu/GpuKernel { // io.github.rajumark.kernelin.webgpu/GpuKernel|null[0]
+final class io.github.rajumark.kernelin.webgpu/GpuException : kotlin/RuntimeException { // io.github.rajumark.kernelin.webgpu/GpuException|null[0]
+    constructor <init>(kotlin/String, kotlin/Throwable? = ...) // io.github.rajumark.kernelin.webgpu/GpuException.<init>|<init>(kotlin.String;kotlin.Throwable?){}[0]
+}
+
+final class io.github.rajumark.kernelin.webgpu/GpuKernel : kotlin/AutoCloseable { // io.github.rajumark.kernelin.webgpu/GpuKernel|null[0]
     final val manifest // io.github.rajumark.kernelin.webgpu/GpuKernel.manifest|{}manifest[0]
         final fun <get-manifest>(): io.github.rajumark.kernelin/KernelManifest // io.github.rajumark.kernelin.webgpu/GpuKernel.manifest.<get-manifest>|<get-manifest>(){}[0]
     final val source // io.github.rajumark.kernelin.webgpu/GpuKernel.source|{}source[0]
         final fun <get-source>(): io.github.rajumark.kernelin/KernelSource // io.github.rajumark.kernelin.webgpu/GpuKernel.source.<get-source>|<get-source>(){}[0]
 
+    final var isClosed // io.github.rajumark.kernelin.webgpu/GpuKernel.isClosed|{}isClosed[0]
+        final fun <get-isClosed>(): kotlin/Boolean // io.github.rajumark.kernelin.webgpu/GpuKernel.isClosed.<get-isClosed>|<get-isClosed>(){}[0]
+
+    final fun close() // io.github.rajumark.kernelin.webgpu/GpuKernel.close|close(){}[0]
     final suspend fun run(kotlin/Int, kotlin.collections/Map<kotlin/String, kotlin/Any> = ..., kotlin.collections/Map<kotlin/String, io.github.rajumark.kernelin.webgpu/GpuData>): io.github.rajumark.kernelin.webgpu/GpuResult // io.github.rajumark.kernelin.webgpu/GpuKernel.run|run(kotlin.Int;kotlin.collections.Map<kotlin.String,kotlin.Any>;kotlin.collections.Map<kotlin.String,io.github.rajumark.kernelin.webgpu.GpuData>){}[0]
+    final suspend fun run(kotlin/Int, kotlin.collections/Map<kotlin/String, kotlin/Any> = ..., kotlin.collections/Map<kotlin/String, io.github.rajumark.kernelin.webgpu/GpuData>, kotlin.collections/Set<kotlin/String>? = ...): io.github.rajumark.kernelin.webgpu/GpuResult // io.github.rajumark.kernelin.webgpu/GpuKernel.run|run(kotlin.Int;kotlin.collections.Map<kotlin.String,kotlin.Any>;kotlin.collections.Map<kotlin.String,io.github.rajumark.kernelin.webgpu.GpuData>;kotlin.collections.Set<kotlin.String>?){}[0]
 }
 
 final class io.github.rajumark.kernelin.webgpu/GpuResult { // io.github.rajumark.kernelin.webgpu/GpuResult|null[0]
     final val millis // io.github.rajumark.kernelin.webgpu/GpuResult.millis|{}millis[0]
         final fun <get-millis>(): kotlin/Double // io.github.rajumark.kernelin.webgpu/GpuResult.millis.<get-millis>|<get-millis>(){}[0]
 
+    final fun buffer(kotlin/String): io.github.rajumark.kernelin.webgpu/GpuBuffer // io.github.rajumark.kernelin.webgpu/GpuResult.buffer|buffer(kotlin.String){}[0]
     final fun floats(kotlin/String): kotlin/FloatArray // io.github.rajumark.kernelin.webgpu/GpuResult.floats|floats(kotlin.String){}[0]
     final fun ints(kotlin/String): kotlin/IntArray // io.github.rajumark.kernelin.webgpu/GpuResult.ints|ints(kotlin.String){}[0]
     final fun js(kotlin/String): kotlin.js/JsAny // io.github.rajumark.kernelin.webgpu/GpuResult.js|js(kotlin.String){}[0]
 }
 
-final class io.github.rajumark.kernelin.webgpu/WebGpu { // io.github.rajumark.kernelin.webgpu/WebGpu|null[0]
+final class io.github.rajumark.kernelin.webgpu/WebGpu : kotlin/AutoCloseable { // io.github.rajumark.kernelin.webgpu/WebGpu|null[0]
     final val description // io.github.rajumark.kernelin.webgpu/WebGpu.description|{}description[0]
         final fun <get-description>(): kotlin/String // io.github.rajumark.kernelin.webgpu/WebGpu.description.<get-description>|<get-description>(){}[0]
+    final val isLost // io.github.rajumark.kernelin.webgpu/WebGpu.isLost|{}isLost[0]
+        final fun <get-isLost>(): kotlin/Boolean // io.github.rajumark.kernelin.webgpu/WebGpu.isLost.<get-isLost>|<get-isLost>(){}[0]
 
+    final var isClosed // io.github.rajumark.kernelin.webgpu/WebGpu.isClosed|{}isClosed[0]
+        final fun <get-isClosed>(): kotlin/Boolean // io.github.rajumark.kernelin.webgpu/WebGpu.isClosed.<get-isClosed>|<get-isClosed>(){}[0]
+    final var lostReason // io.github.rajumark.kernelin.webgpu/WebGpu.lostReason|{}lostReason[0]
+        final fun <get-lostReason>(): kotlin/String? // io.github.rajumark.kernelin.webgpu/WebGpu.lostReason.<get-lostReason>|<get-lostReason>(){}[0]
+    final var onLost // io.github.rajumark.kernelin.webgpu/WebGpu.onLost|{}onLost[0]
+        final fun <get-onLost>(): kotlin/Function1<kotlin/String, kotlin/Unit>? // io.github.rajumark.kernelin.webgpu/WebGpu.onLost.<get-onLost>|<get-onLost>(){}[0]
+        final fun <set-onLost>(kotlin/Function1<kotlin/String, kotlin/Unit>?) // io.github.rajumark.kernelin.webgpu/WebGpu.onLost.<set-onLost>|<set-onLost>(kotlin.Function1<kotlin.String,kotlin.Unit>?){}[0]
+    final var onUncapturedError // io.github.rajumark.kernelin.webgpu/WebGpu.onUncapturedError|{}onUncapturedError[0]
+        final fun <get-onUncapturedError>(): kotlin/Function1<kotlin/String, kotlin/Unit>? // io.github.rajumark.kernelin.webgpu/WebGpu.onUncapturedError.<get-onUncapturedError>|<get-onUncapturedError>(){}[0]
+        final fun <set-onUncapturedError>(kotlin/Function1<kotlin/String, kotlin/Unit>?) // io.github.rajumark.kernelin.webgpu/WebGpu.onUncapturedError.<set-onUncapturedError>|<set-onUncapturedError>(kotlin.Function1<kotlin.String,kotlin.Unit>?){}[0]
+
+    final fun close() // io.github.rajumark.kernelin.webgpu/WebGpu.close|close(){}[0]
     final suspend fun load(io.github.rajumark.kernelin/KernelSource): io.github.rajumark.kernelin.webgpu/GpuKernel // io.github.rajumark.kernelin.webgpu/WebGpu.load|load(io.github.rajumark.kernelin.KernelSource){}[0]
 
     final object Companion { // io.github.rajumark.kernelin.webgpu/WebGpu.Companion|null[0]

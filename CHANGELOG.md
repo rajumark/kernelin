@@ -16,6 +16,20 @@ WebGPU host:
 - `GpuKernel.run` rejects unknown parameter names, scalars of the wrong type (a `Float` for an `Int`) and
   buffer data of the wrong type (`FloatArray` for an `IntArray`) with a clear `IllegalArgumentException`,
   before anything reaches the GPU. Before, they were ignored, truncated or reinterpreted bit by bit.
+- WebGPU errors are no longer silent: `load` and `run` check WebGPU's error scopes (validation, out of memory) and
+  throw the new `GpuException` with the browser's message. The pipeline is built with `createComputePipelineAsync`.
+- Lost devices: `WebGpu.isLost`, `lostReason` and an `onLost` callback; `load` and `run` on a lost device throw
+  `GpuException`. `onUncapturedError` reports errors outside `load` and `run`.
+- `close()` on `GpuKernel` (frees its buffers) and on `WebGpu` (frees every kernel and the device); both are
+  `AutoCloseable`. `run` after `close` throws `IllegalStateException`.
+- Two overlapping `run` calls on one kernel no longer share buffers (one of them failed); the second now waits.
+- Every buffer, pipeline and bind group is labeled with the kernel and parameter name (`my.pkg.blur: out`), so
+  browser errors name them.
+- Keep data on the GPU: `run(..., readBack = setOf("out"))` copies back only those buffers, and
+  `GpuData.of(result.buffer("out"))` passes a buffer to the next run with a GPU-side copy. The old `run` signature
+  still compiles and links.
+- Bulk copies between Kotlin arrays and JS typed arrays (`GpuData.of`, `floats`, `ints`, `toJsFloat32Array`,
+  `toJsInt32Array`): about 8x faster to JS and 4x faster back for 4M floats.
 
 ## 0.2.0 (2026-10-16)
 

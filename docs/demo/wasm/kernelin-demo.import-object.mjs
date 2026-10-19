@@ -156,45 +156,50 @@ const js_code = {
                 setTimeout(function () { throw error }, 0);
             }
          },
-    'io.github.rajumark.kernelin.webgpu.newArray' : () => [],
-    'io.github.rajumark.kernelin.webgpu.pushUniformEntry' : (entries, binding) => { entries.push({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }); },
-    'io.github.rajumark.kernelin.webgpu.pushStorageEntry' : (entries, binding, readOnly) => { entries.push({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: readOnly ? 'read-only-storage' : 'storage' } }); },
-    'io.github.rajumark.kernelin.webgpu.createBindGroupLayout' : (device, entries) => device.createBindGroupLayout({ entries }),
-    'io.github.rajumark.kernelin.webgpu.createComputePipeline' : (device, module, layout, entryPoint) => device.createComputePipeline({ layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }), compute: { module, entryPoint } }),
-    'io.github.rajumark.kernelin.webgpu.createBuffer' : (device, size, usage) => device.createBuffer({ size, usage }),
     'io.github.rajumark.kernelin.webgpu.newDataView' : (bytes) => new DataView(new ArrayBuffer(bytes)),
     'io.github.rajumark.kernelin.webgpu.setUint32' : (view, offset, value) => { view.setUint32(offset, value >>> 0, true); },
     'io.github.rajumark.kernelin.webgpu.setFloat32' : (view, offset, value) => { view.setFloat32(offset, value, true); },
     'io.github.rajumark.kernelin.webgpu.setInt32' : (view, offset, value) => { view.setInt32(offset, value, true); },
+    'io.github.rajumark.kernelin.webgpu.now' : () => performance.now(),
+    'io.github.rajumark.kernelin.webgpu.pushErrorScopes' : (device) => { device.pushErrorScope('out-of-memory'); device.pushErrorScope('validation'); },
+    'io.github.rajumark.kernelin.webgpu.popErrorScopes' : (device) => Promise.all([device.popErrorScope(), device.popErrorScope()])
+        .then(([validation, memory]) => [validation && 'validation: ' + validation.message, memory && 'out of memory: ' + memory.message]
+            .filter(Boolean).join('; ')),
+    'io.github.rajumark.kernelin.webgpu.newArray' : () => [],
+    'io.github.rajumark.kernelin.webgpu.push' : (array, value) => { array.push(value); },
+    'io.github.rajumark.kernelin.webgpu.readBackAll' : (stagings, isInt) => Promise.all(stagings.map((staging, i) =>
+        staging.mapAsync(GPUMapMode.READ).then(() => {
+            const copy = staging.getMappedRange().slice(0);
+            staging.unmap();
+            return isInt[i] ? new Int32Array(copy) : new Float32Array(copy);
+        }))),
+    'io.github.rajumark.kernelin.webgpu.settle' : (promise) => promise.then(() => null, () => null),
+    'io.github.rajumark.kernelin.webgpu.arrayAt' : (array, index) => array[index],
+    'io.github.rajumark.kernelin.webgpu.bufferSize' : (buffer) => buffer.size,
     'io.github.rajumark.kernelin.webgpu.writeBuffer' : (device, buffer, data) => { device.queue.writeBuffer(buffer, 0, data); },
     'io.github.rajumark.kernelin.webgpu.dataViewBuffer' : (view) => view.buffer,
-    'io.github.rajumark.kernelin.webgpu.now' : () => performance.now(),
-    'io.github.rajumark.kernelin.webgpu.bufferSize' : (buffer) => buffer.size,
     'io.github.rajumark.kernelin.webgpu.pushBufferBinding' : (entries, binding, buffer) => { entries.push({ binding, resource: { buffer } }); },
-    'io.github.rajumark.kernelin.webgpu.createBindGroup' : (device, layout, entries) => device.createBindGroup({ layout, entries }),
+    'io.github.rajumark.kernelin.webgpu.createBindGroup' : (device, layout, entries, label) => device.createBindGroup({ layout, entries, label }),
     'io.github.rajumark.kernelin.webgpu.maxWorkgroupsPerDimension' : (device) => device.limits.maxComputeWorkgroupsPerDimension,
-    'io.github.rajumark.kernelin.webgpu.push' : (array, value) => { array.push(value); },
-    'io.github.rajumark.kernelin.webgpu.submitDispatch' : (device, pipeline, group, gx, gy, from, to) => {
-        const encoder = device.createCommandEncoder();
-        const pass = encoder.beginComputePass();
+    'io.github.rajumark.kernelin.webgpu.submitDispatch' : (device, pipeline, group, gx, gy, clears, inFrom, inTo, outFrom, outTo, label) => {
+        const encoder = device.createCommandEncoder({ label });
+        for (let i = 0; i < inFrom.length; i++) encoder.copyBufferToBuffer(inFrom[i], 0, inTo[i], 0, inTo[i].size);
+        for (const buffer of clears) encoder.clearBuffer(buffer);
+        const pass = encoder.beginComputePass({ label });
         pass.setPipeline(pipeline);
         pass.setBindGroup(0, group);
         pass.dispatchWorkgroups(gx, gy);
         pass.end();
-        for (let i = 0; i < from.length; i++) encoder.copyBufferToBuffer(from[i], 0, to[i], 0, from[i].size);
-        device.queue.submit([encoder.finish()]);
+        for (let i = 0; i < outFrom.length; i++) encoder.copyBufferToBuffer(outFrom[i], 0, outTo[i], 0, outFrom[i].size);
+        device.queue.submit([encoder.finish({ label })]);
     },
-    'io.github.rajumark.kernelin.webgpu.readBack' : (staging, isInt) => staging.mapAsync(GPUMapMode.READ).then(() => {
-        const copy = staging.getMappedRange().slice(0);
-        staging.unmap();
-        return isInt ? new Int32Array(copy) : new Float32Array(copy);
-    }),
-    'io.github.rajumark.kernelin.webgpu.destroyBuffer' : (buffer) => { buffer.destroy(); },
+    'io.github.rajumark.kernelin.webgpu.destroyAll' : (buffers) => { for (const b of buffers) b.destroy(); },
+    'io.github.rajumark.kernelin.webgpu.createBuffer' : (device, size, usage, label) => device.createBuffer({ size, usage, label }),
     'io.github.rajumark.kernelin.webgpu.gpuSupported' : () => typeof navigator !== 'undefined' && !!navigator.gpu,
     'io.github.rajumark.kernelin.webgpu.requestDevice' : () => (async () => {
         const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
         if (!adapter) throw new Error('No WebGPU adapter found');
-        const device = await adapter.requestDevice({ requiredLimits: {
+        const device = await adapter.requestDevice({ label: 'Kernelin', requiredLimits: {
             maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
             maxBufferSize: adapter.limits.maxBufferSize } });
         const info = adapter.info || {};
@@ -202,10 +207,19 @@ const js_code = {
         return device;
     })(),
     'io.github.rajumark.kernelin.webgpu.deviceDescription' : (device) => device.kernelinDescription,
-    'io.github.rajumark.kernelin.webgpu.createShaderModule' : (device, code) => device.createShaderModule({ code }),
+    'io.github.rajumark.kernelin.webgpu.watchDevice' : (device, onLost, onError) => {
+        device.lost.then(info => onLost(info.reason + ': ' + info.message));
+        device.addEventListener('uncapturederror', e => onError(e.error.message));
+    },
+    'io.github.rajumark.kernelin.webgpu.createShaderModule' : (device, code, label) => device.createShaderModule({ code, label }),
     'io.github.rajumark.kernelin.webgpu.compilationErrors' : (module) => module.getCompilationInfo().then(i => i.messages.filter(m => m.type === 'error').map(m => m.lineNum + ':' + m.message).join('; ')),
-    'io.github.rajumark.kernelin.webgpu.newInt32Array' : (length) => new Int32Array(length),
-    'io.github.rajumark.kernelin.webgpu.writeInt' : (array, index, value) => { array[index] = value; },
+    'io.github.rajumark.kernelin.webgpu.pushUniformEntry' : (entries, binding) => { entries.push({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }); },
+    'io.github.rajumark.kernelin.webgpu.pushStorageEntry' : (entries, binding, readOnly) => { entries.push({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: readOnly ? 'read-only-storage' : 'storage' } }); },
+    'io.github.rajumark.kernelin.webgpu.createBindGroupLayout' : (device, entries, label) => device.createBindGroupLayout({ entries, label }),
+    'io.github.rajumark.kernelin.webgpu.createComputePipelineAsync' : (device, module, layout, entryPoint, label) => device.createComputePipelineAsync({ label, compute: { module, entryPoint },
+            layout: device.createPipelineLayout({ bindGroupLayouts: [layout], label: label + ' layout' }) }),
+    'io.github.rajumark.kernelin.webgpu.int32ArrayFromMemory' : (memory, address, length) => new Int32Array(memory.buffer.slice(address, address + length * 4)),
+    'io.github.rajumark.kernelin.webgpu.pushBoolean' : (array, value) => { array.push(value); },
     'io.github.rajumark.kernelin.samples.frame' : (ms, data) => ({ ms, data }),
     'io.github.rajumark.kernelin.samples.now' : () => performance.now()
 }
