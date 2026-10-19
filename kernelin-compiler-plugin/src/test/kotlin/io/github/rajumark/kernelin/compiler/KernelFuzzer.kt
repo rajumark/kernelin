@@ -210,7 +210,7 @@ class KernelFuzzer(private val seed: Long) {
     private fun intExpr(depth: Int): String {
         if (depth <= 0 || r.nextInt(10) < 3) return intLeaf()
         val x = { intExpr(depth - 1) }
-        return when (r.nextInt(17)) {
+        return when (r.nextInt(18)) {
             0 -> "(${x()} + ${x()})"
             1 -> "(${x()} - ${x()})"
             2 -> "(${x()} * ${x()})"
@@ -228,6 +228,12 @@ class KernelFuzzer(private val seed: Long) {
             // Through Float only with exactly representable values, so both sides must agree.
             14 -> "((${x()} and 65535).toFloat() / 4f).toInt()"
             15 -> "${floatExpr(depth - 1)}.compareTo(${floatExpr(depth - 1)})"
+            // Kernelin's random numbers: same bits on both sides (randomFloat is a multiple of 2^-24).
+            16 -> when (r.nextInt(3)) {
+                0 -> "randomInt(${x()}, ${x()}${if (r.nextBoolean()) ", ${x()}" else ""})"
+                1 -> "randomIntBelow((${x()} and 1023) + 1, ${x()}, ${x()}, ${x()})"
+                else -> "(randomFloat(${x()}, ${x()}) * 16777216f).toInt()"
+            }
             else -> helpers.randomOrNull(r)?.let { (h, n) -> "$h(${(0 until n).joinToString { x() }})" } ?: x()
         }
     }

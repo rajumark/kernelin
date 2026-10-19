@@ -459,6 +459,38 @@ class WgslTranslationTest {
         )
         assertContains(c.errors.joinToString("\n"), "recursion isn't allowed")
     }
+
+    @Test
+    fun `random numbers use Kernelin's own u32 functions`() {
+        val c = compileOk(
+            """
+            fun jitter(seed: Int, i: Int): Float = randomFloat(seed, i, 7) - 0.5f
+
+            @Kernel
+            fun noise(seed: Int, ints: IntArray, out: FloatArray) {
+                val i = globalId()
+                ints[i] = randomInt(seed, i) + randomIntBelow(6, seed, i, 1)
+                out[i] = randomFloat(seed, i, 2) + randomNormal(seed, i, 3) + jitter(seed, i)
+            }
+
+            @Kernel
+            fun plain(out: FloatArray) {
+                out[globalId()] = 1f
+            }
+            """,
+        )
+        val wgsl = c.wgsl("noise")
+        // A left-out stream is 0.
+        assertContains(wgsl, "kernelin_random_int(kernelin_params.seed, i, 0i)")
+        assertContains(wgsl, "kernelin_random_below(6i, kernelin_params.seed, i, 1i)")
+        assertContains(wgsl, "kernelin_random_float(kernelin_params.seed, i, 2i)")
+        assertContains(wgsl, "kernelin_random_normal(kernelin_params.seed, i, 3i)")
+        assertContains(wgsl, "kernelin_random_float(seed_1, i_1, 7i)")
+        assertContains(wgsl, "let state = v * 747796405u + 2891336453u;")
+        assertEquals(1, Regex("fn kernelin_pcg\\(").findAll(wgsl).count(), "the hash is emitted once")
+        // Kernels that don't use random numbers don't get the functions.
+        assertTrue("kernelin_pcg" !in c.wgsl("plain"))
+    }
 }
 
 /** Validates generated WGSL with naga (from the wgpu project) when it's installed. */

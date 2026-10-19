@@ -93,7 +93,7 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 
 | Artifact | What it is |
 |---|---|
-| `io.github.rajumark:kernelin-runtime:0.3.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest` (JVM, JS, Wasm, Native; see below) |
+| `io.github.rajumark:kernelin-runtime:0.3.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest`, random numbers (JVM, JS, Wasm, Native; see below) |
 | `io.github.rajumark:kernelin-webgpu:0.3.0` | Kotlin/Wasm WebGPU host: `WebGpu`, `GpuKernel`, `GpuData`, `GpuResult` |
 | `io.github.rajumark:kernelin-compiler-plugin:0.3.0` | The K2 compiler plugin (added by the Gradle plugin) |
 | `io.github.rajumark:kernelin-gradle-plugin:0.3.0` | Gradle plugin with id `io.github.rajumark.kernelin` |
@@ -221,6 +221,7 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 | Constants | `PI.toFloat()`, `E.toFloat()`, `1.5.toFloat()`, `1.5.toInt()` (a Double constant converted right away) |
 | Constant math **(0.2.0)** | All-constant expressions are computed at build time with Kotlin's rules (wrapping, Infinity/NaN), e.g. `-75 shl 28`; `Float.POSITIVE_INFINITY`, `NEGATIVE_INFINITY` and `NaN` constants are allowed |
 | Float checks **(0.2.0)** | `isNaN()`, `isInfinite()`, `isFinite()`; `Float.toInt()` matches Kotlin exactly (NaN → 0, too large → `Int.MAX_VALUE`, too small → `Int.MIN_VALUE`) |
+| Random numbers **(main)** | `randomInt(seed, index, stream)`, `randomFloat(...)` in `[0, 1)`, `randomIntBelow(bound, seed, index, stream)`, `randomNormal(...)`; the same bits on the CPU and the GPU (see [Random numbers](#random-numbers-main)) |
 | Helpers | Your own top-level functions and extension functions with `Int`/`Float`/`Boolean` parameters, returning `Int`, `Float`, `Boolean` or `Unit`. They become WGSL `fn`s. **(0.2.0)**: helpers can also take the kernel's `FloatArray`/`IntArray` parameters. |
 
 ### Not supported (compile error)
@@ -234,7 +235,7 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 | `throw`, `try/catch` | No exceptions | Return early or write an error code |
 | Nullable types, `is`, `as` | No objects on the GPU | Plain values |
 | Classes, objects, collections | Only scalars and arrays exist | Several arrays (one per field) |
-| Library calls (except `kotlin.math`) | Their code isn't available to translate | Your own helper function |
+| Library calls (except `kotlin.math` and Kernelin's random functions) | Their code isn't available to translate | Your own helper function |
 | Default args, generics in helpers | Not supported yet | Pass every argument |
 | Structs / data classes, 2D/3D ids, shared memory, atomics | Not supported yet | Flat arrays, `id % width`, one writer per element |
 | A non-`Unit` return from a kernel | Results go into arrays | Write into an array parameter |
@@ -470,6 +471,8 @@ The same kernel gives the same results on the CPU and the GPU, with these known 
 | `Float.toInt()` on NaN or out-of-range values | NaN → 0, saturates at `Int.MIN_VALUE` / `Int.MAX_VALUE` | **Same as Kotlin** (since 0.2.0). On 0.1.0 the result is GPU-specific |
 | Array index out of bounds | Throws `ArrayIndexOutOfBoundsException` | No error: the access is clamped silently. Test on the CPU to catch it |
 | Integer division by zero | Throws `ArithmeticException` | No error: returns a defined value. Since 0.2.0, a **constant** division like `5 / 0` is a compile error |
+| `randomNormal` **(main)** | Computed with `ln`, `sqrt`, `cos` | Within about 1e-5 of the CPU, not bit for bit. `randomInt`, `randomFloat` and `randomIntBelow` are **bit-identical** |
+| `randomIntBelow` with `bound` 0 or less **(main)** | Throws `IllegalArgumentException` | Returns 0 |
 | Two threads writing the same element | `dispatch`: the highest id wins; `dispatchParallel`: a race | Undefined order. Give each thread its own element |
 
 Rule of thumb: don't rely on producing `Infinity` or `NaN` inside a kernel. Guard divisions (`if (d != 0f) x / d else 0f`).
@@ -548,6 +551,34 @@ fun globalId(): Int
 ```
 
 The index of the current thread, from `0` to `size - 1`. On the GPU it is the global invocation id; on the CPU it is set by `KernelinCpu`.
+
+### Random numbers **(main)**
+
+```kotlin
+fun randomInt(seed: Int, index: Int, stream: Int = 0): Int            // all 32 bits random
+fun randomFloat(seed: Int, index: Int, stream: Int = 0): Float        // in [0, 1), never 1
+fun randomIntBelow(bound: Int, seed: Int, index: Int, stream: Int = 0): Int  // in 0 until bound
+fun randomNormal(seed: Int, index: Int, stream: Int = 0): Float       // mean 0, standard deviation 1
+```
+
+Random numbers for kernels, in `io.github.rajumark.kernelin`. They keep no state: the same `(seed, index, stream)` always gives the same number. Use `globalId()` as the `index`, and number the draws of one thread with `stream` (0, 1, 2, ...). So the results don't depend on how the work is split into threads, and a run is easy to repeat: pass the `seed` as a kernel parameter.
+
+```kotlin
+@Kernel
+fun monteCarloPi(seed: Int, hits: IntArray) {
+    val i = globalId()
+    val x = randomFloat(seed, i, 0)
+    val y = randomFloat(seed, i, 1)
+    hits[i] = if (x * x + y * y < 1f) 1 else 0
+}
+```
+
+- `randomInt`, `randomFloat` and `randomIntBelow` give **exactly the same bits** on the CPU (every platform) and the GPU. The math is 32-bit unsigned, where Kotlin's `Int` wraps the same way. `randomFloat` is the top 24 bits times 2^-24, which is exact in a Float.
+- `randomNormal` uses the Box-Muller method (`sqrt`, `ln`, `cos`), so the GPU is within about 1e-5 of the CPU, not bit for bit. Its values stay within about ±5.8.
+- `randomIntBelow` needs a positive `bound`: the CPU throws, the GPU returns 0. It is very slightly biased (at most `bound / 2^32`).
+- For one `seed` and `stream`, different indexes always give different `randomInt` values.
+- The bits come from three rounds of the PCG hash (Jarzynski and Olano, 2020). Good for simulations, noise and sampling, not for cryptography.
+- They also work in your helper functions and on the CPU outside a kernel.
 
 ### `kernelSource(kernel)`
 
@@ -845,6 +876,7 @@ Follow every rule. If a rule can't be met, don't write a kernel; write normal Ko
 9. 2D data is a flat array: `x = i % width`, `y = i / width`.
 10. Guard neighbour reads: `if (j >= 0 && j < a.size)`. The bounds check against `size` is automatic only for `globalId()` itself.
 11. Never divide by a value that can be zero without a check: `x / 0f` is undefined on the GPU (it is not guaranteed to be `Infinity` or `NaN`).
+12. For random numbers use Kernelin's `randomFloat(seed, i, stream)`, `randomInt`, `randomIntBelow` or `randomNormal` (`import io.github.rajumark.kernelin.*`), with a different `stream` for every draw in one thread. Don't use `kotlin.random` and don't write your own hash.
 
 ### Template
 

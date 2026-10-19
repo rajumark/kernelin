@@ -8,6 +8,11 @@
   compiler plugin records the call in a new `KernelLaunch` (runtime) that GPU hosts read with
   `KernelLaunch.capture`. A launch block that is not exactly one kernel call is a compile error, shown in the IDE
   too. The map API (`gpu.load(...).run(size, scalars, buffers)`) still works.
+- Built-in random numbers for kernels: `randomInt(seed, index, stream)`, `randomFloat` (in `[0, 1)`),
+  `randomIntBelow(bound, seed, index, stream)` and `randomNormal` (Box-Muller). They are counter based and keep no
+  state, so pass `globalId()` as the index and a different `stream` for each draw. `randomInt`, `randomFloat` and
+  `randomIntBelow` give the same bits on the CPU (every platform) and the GPU; `randomNormal` agrees to about 1e-5.
+  Before, apps had to write their own hash.
 
 ## 0.3.0 (2026-10-19)
 

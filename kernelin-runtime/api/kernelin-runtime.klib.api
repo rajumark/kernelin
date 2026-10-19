@@ -97,3 +97,7 @@ final object io.github.rajumark.kernelin/KernelinCpu { // io.github.rajumark.ker
 
 final fun io.github.rajumark.kernelin/globalId(): kotlin/Int // io.github.rajumark.kernelin/globalId|globalId(){}[0]
 final fun io.github.rajumark.kernelin/kernelSource(kotlin.reflect/KFunction<*>): io.github.rajumark.kernelin/KernelSource // io.github.rajumark.kernelin/kernelSource|kernelSource(kotlin.reflect.KFunction<*>){}[0]
+final fun io.github.rajumark.kernelin/randomFloat(kotlin/Int, kotlin/Int, kotlin/Int = ...): kotlin/Float // io.github.rajumark.kernelin/randomFloat|randomFloat(kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+final fun io.github.rajumark.kernelin/randomInt(kotlin/Int, kotlin/Int, kotlin/Int = ...): kotlin/Int // io.github.rajumark.kernelin/randomInt|randomInt(kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+final fun io.github.rajumark.kernelin/randomIntBelow(kotlin/Int, kotlin/Int, kotlin/Int, kotlin/Int = ...): kotlin/Int // io.github.rajumark.kernelin/randomIntBelow|randomIntBelow(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+final fun io.github.rajumark.kernelin/randomNormal(kotlin/Int, kotlin/Int, kotlin/Int = ...): kotlin/Float // io.github.rajumark.kernelin/randomNormal|randomNormal(kotlin.Int;kotlin.Int;kotlin.Int){}[0]

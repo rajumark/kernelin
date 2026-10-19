@@ -1033,6 +1033,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             val resultType = scalarType(call.type)
 
             if (owner == "io.github.rajumark.kernelin" && name == "globalId") return Expr("i32(kernelin_id)", WType.I32)
+            if (owner == "io.github.rajumark.kernelin" && name in RANDOM_FUNCTIONS) return randomCall(call, name, pre)
 
             // Built-in comparison operators.
             if (owner == "kotlin.internal.ir") return builtinOperator(call, name, pre)
@@ -1096,6 +1097,17 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
                 }
             }
             return helperCall(call, fn, pre)
+        }
+
+        /** randomInt/randomFloat/randomIntBelow/randomNormal: Kernelin's counter-based random numbers. */
+        private fun randomCall(call: IrCall, name: String, pre: MutableList<String>): Expr {
+            // A left-out `stream` is null here (default arguments aren't filled in yet); it means 0.
+            val args = call.arguments.map { it?.let { a -> cast(expr(a, pre), WType.I32) } ?: "0i" }
+            val wgsl = RANDOM_FUNCTIONS.getValue(name)
+            runtime += "kernelin_random_bits"
+            runtime += wgsl
+            val type = if (name == "randomInt" || name == "randomIntBelow") WType.I32 else WType.F32
+            return Expr("$wgsl(${args.joinToString(", ")})", type)
         }
 
         /** `x in a..b`, `x in a until b`, `x in a downTo b` (also `!in` and `when (x) { in a..b -> }`). */
@@ -1512,11 +1524,69 @@ internal class NameAllocator {
     }
 }
 
+/** Kernelin's random functions (in Random.kt of the runtime) and the WGSL function each one becomes. */
+private val RANDOM_FUNCTIONS = mapOf(
+    "randomInt" to "kernelin_random_int",
+    "randomFloat" to "kernelin_random_float",
+    "randomIntBelow" to "kernelin_random_below",
+    "randomNormal" to "kernelin_random_normal",
+)
+
 /**
  * Kernelin's own WGSL functions for Kotlin semantics that WGSL leaves open. NaN is always checked on the bits
  * (kernelin_is_nan), because GPU compilers may assume there are no NaNs and drop a plain `x != x`.
  */
 private val RUNTIME_FUNCTIONS = mapOf(
+    // The random functions must give the CPU's bits: the same u32 math as Random.kt in kernelin-runtime, where
+    // Int arithmetic wraps like u32 arithmetic and `ushr` is `>>` on u32.
+    "kernelin_random_bits" to """
+        fn kernelin_pcg(v: u32) -> u32 {
+          let state = v * 747796405u + 2891336453u;
+          let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+          return (word >> 22u) ^ word;
+        }
+
+        fn kernelin_random_bits(seed: i32, index: i32, stream: i32) -> u32 {
+          return kernelin_pcg(bitcast<u32>(index) + kernelin_pcg(bitcast<u32>(stream) + kernelin_pcg(bitcast<u32>(seed))));
+        }
+    """,
+    "kernelin_random_int" to """
+        fn kernelin_random_int(seed: i32, index: i32, stream: i32) -> i32 {
+          return bitcast<i32>(kernelin_random_bits(seed, index, stream));
+        }
+    """,
+    // Top 24 bits times 2^-24: exact in f32, so the same Float as on the CPU.
+    "kernelin_random_float" to """
+        fn kernelin_random_float(seed: i32, index: i32, stream: i32) -> f32 {
+          return f32(kernelin_random_bits(seed, index, stream) >> 8u) * 5.9604645e-8f;
+        }
+    """,
+    // The high 32 bits of the 64-bit product bits * bound, from 16-bit halves (WGSL has no 64-bit integers).
+    // The CPU throws for bound <= 0; the GPU can't, so it returns 0.
+    "kernelin_random_below" to """
+        fn kernelin_random_below(bound: i32, seed: i32, index: i32, stream: i32) -> i32 {
+          if (bound <= 0i) {
+            return 0i;
+          }
+          let a = kernelin_random_bits(seed, index, stream);
+          let b = u32(bound);
+          let lo_lo = (a & 0xffffu) * (b & 0xffffu);
+          let hi_lo = (a >> 16u) * (b & 0xffffu);
+          let lo_hi = (a & 0xffffu) * (b >> 16u);
+          let hi_hi = (a >> 16u) * (b >> 16u);
+          let cross = (lo_lo >> 16u) + (hi_lo & 0xffffu) + lo_hi;
+          return i32(hi_hi + (hi_lo >> 16u) + (cross >> 16u));
+        }
+    """,
+    // Box-Muller, as in Random.kt. ln, sqrt and cos make it close to the CPU, not bit-identical.
+    "kernelin_random_normal" to """
+        fn kernelin_random_normal(seed: i32, index: i32, stream: i32) -> f32 {
+          let bits = kernelin_random_bits(seed, index, stream);
+          let u1 = 1.0f - f32(bits >> 8u) * 5.9604645e-8f;
+          let u2 = f32(kernelin_pcg(bits) >> 8u) * 5.9604645e-8f;
+          return sqrt(-2.0f * log(u1)) * cos(u2 * 6.2831855f - 3.1415927f);
+        }
+    """,
     // Kotlin's min/max (Java's Math.min/max): NaN if either side is NaN, and -0f is less than 0f.
     "kernelin_min" to """
         fn kernelin_min(a: f32, b: f32) -> f32 {

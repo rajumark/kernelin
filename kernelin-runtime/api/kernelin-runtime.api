@@ -78,3 +78,14 @@ public final class io/github/rajumark/kernelin/KernelinShaders {
 	public final fun wgsl (Ljava/lang/String;)Ljava/lang/String;
 }
 
+public final class io/github/rajumark/kernelin/RandomKt {
+	public static final fun randomFloat (III)F
+	public static synthetic fun randomFloat$default (IIIILjava/lang/Object;)F
+	public static final fun randomInt (III)I
+	public static synthetic fun randomInt$default (IIIILjava/lang/Object;)I
+	public static final fun randomIntBelow (IIII)I
+	public static synthetic fun randomIntBelow$default (IIIIILjava/lang/Object;)I
+	public static final fun randomNormal (III)F
+	public static synthetic fun randomNormal$default (IIIILjava/lang/Object;)F
+}
+

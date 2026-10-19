@@ -497,4 +497,48 @@ class GpuDifferentialTest {
             absTol = 0.0, relTol = 1e-6,
         )
     }
+
+    @Test
+    fun `random numbers have the same bits on the CPU and the GPU`() {
+        val size = 100_000
+        GpuDifferential.assertSame(
+            """
+            fun dice(seed: Int, i: Int): Int = randomIntBelow(6, seed, i, 4) + 1
+
+            @Kernel
+            fun k(seed: Int, ints: IntArray, below: IntArray, floats: FloatArray) {
+                val i = globalId()
+                // Large seeds and the indexes near Int.MAX_VALUE exercise the u32 wrap-around.
+                ints[i] = randomInt(seed, i) xor randomInt(seed, Int.MAX_VALUE - i, -i)
+                below[i] = randomIntBelow(1 + i * 7919, seed, i, 2) + randomIntBelow(Int.MAX_VALUE, -seed, i, 3) % 1000 + dice(seed, i)
+                floats[i] = randomFloat(seed, i, 1)
+            }
+            """,
+            "k", size,
+            mapOf("seed" to -1_234_567_891, "ints" to IntArray(size), "below" to IntArray(size), "floats" to FloatArray(size)),
+            exactFloats = true,
+        )
+    }
+
+    @Test
+    fun `random normal numbers agree on the CPU and the GPU`() {
+        val size = 50_000
+        val r = GpuDifferential.assertSame(
+            """
+            @Kernel
+            fun k(seed: Int, out: FloatArray) {
+                val i = globalId()
+                out[i] = randomNormal(seed, i, 9)
+            }
+            """,
+            "k", size, mapOf("seed" to 31, "out" to FloatArray(size)),
+            // sqrt, ln and cos round a little differently on the GPU.
+            absTol = 1e-5, relTol = 1e-4,
+        )
+        val gpu = r.gpu.getValue("out") as FloatArray
+        val mean = gpu.sumOf { it.toDouble() } / size
+        val variance = gpu.sumOf { (it - mean) * (it - mean) } / size
+        assertEquals(0.0, mean, 0.03)
+        assertEquals(1.0, variance, 0.04)
+    }
 }
