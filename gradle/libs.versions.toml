@@ -10,6 +10,8 @@ agp = "9.3.1"
 # Native WebGPU (Dawn) for the Android GPU host.
 androidx-webgpu = "1.0.0-alpha06"
 androidx-test-runner = "1.7.0"
+# Native WebGPU (wgpu, the engine of Firefox and Deno) for the desktop JVM GPU host, through JNI.
+jwebgpu = "0.3.4"
 
 [libraries]
 kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
@@ -20,6 +22,11 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 androidx-webgpu = { module = "androidx.webgpu:webgpu", version.ref = "androidx-webgpu" }
+jwebgpu = { module = "com.github.xpenatan.jWebGPU:webgpu-jni", version.ref = "jwebgpu" }
+jwebgpu-wgpu-linux-x64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-jni-wgpu_linux_x64", version.ref = "jwebgpu" }
+jwebgpu-wgpu-mac-arm64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-jni-wgpu_mac_arm64", version.ref = "jwebgpu" }
+jwebgpu-wgpu-mac-x64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-jni-wgpu_mac_x64", version.ref = "jwebgpu" }
+jwebgpu-wgpu-windows-x64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-jni-wgpu_windows_x64", version.ref = "jwebgpu" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 

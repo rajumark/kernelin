@@ -17,7 +17,7 @@ fun saxpy(alpha: Float, x: FloatArray, y: FloatArray) {
 | **What it is** | A Kotlin compiler plugin + a small runtime + a WebGPU host |
 | **Input** | Top-level Kotlin functions marked `@Kernel` |
 | **Output** | A WGSL compute shader and a JSON manifest per kernel, embedded in your program |
-| **Runs on** | Any WebGPU GPU (Metal, Vulkan, Direct3D 12) from Kotlin/Wasm; the CPU on JVM, Android, JS, Wasm and Native |
+| **Runs on** | Any WebGPU GPU (Metal, Vulkan, Direct3D 12) from Kotlin/Wasm, and **(main)** natively from Android and desktop JVM apps; the CPU on JVM, Android, JS, Wasm and Native |
 | **License** | Apache 2.0 |
 
 ## Quick start
@@ -83,7 +83,7 @@ fun main() {
 
 ### 4. Run it on the GPU
 
-GPU execution uses WebGPU from **Kotlin/Wasm** in the browser. See [Run on the GPU](#run-on-the-gpu).
+GPU execution uses WebGPU from **Kotlin/Wasm** in the browser, and **(main)** natively on Android and in desktop JVM apps. See [Run on the GPU](#run-on-the-gpu).
 
 Complete, runnable projects live in [`examples/`](https://github.com/rajumark/kernelin/tree/main/examples): `hello-jvm` and `hello-multiplatform`.
 
@@ -94,7 +94,7 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 | Artifact | What it is |
 |---|---|
 | `io.github.rajumark:kernelin-runtime:0.3.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu`, `KernelManifest`, random numbers (JVM, JS, Wasm, Native; see below) |
-| `io.github.rajumark:kernelin-webgpu:0.3.0` | Kotlin/Wasm WebGPU host: `WebGpu`, `GpuKernel`, `GpuData`, `GpuResult` |
+| `io.github.rajumark:kernelin-webgpu:0.3.0` | WebGPU host: `WebGpu`, `GpuKernel`, `GpuData`, `GpuResult`. Kotlin/Wasm; on main also Android and the desktop JVM |
 | `io.github.rajumark:kernelin-compiler-plugin:0.3.0` | The K2 compiler plugin (added by the Gradle plugin) |
 | `io.github.rajumark:kernelin-gradle-plugin:0.3.0` | Gradle plugin with id `io.github.rajumark.kernelin` |
 
@@ -113,7 +113,7 @@ Complete, runnable projects live in [`examples/`](https://github.com/rajumark/ke
 
 | Platform | Kernels run on the CPU (`KernelinCpu`) | `kernelSource(::k)` (WGSL) | GPU host in Kernelin |
 |---|---|---|---|
-| JVM | yes, also on all cores with `dispatchParallel` | yes | no (use the WGSL with your own WebGPU host) |
+| JVM | yes, also on all cores with `dispatchParallel` | yes | yes: `kernelin-webgpu` on macOS, Linux x64 and Windows x64, native WebGPU through jWebGPU (wgpu), no browser **(main)** |
 | Android (JVM artifact) | yes | yes | yes: `kernelin-webgpu` on Android 8.0+, native WebGPU through AndroidX WebGPU **(main)** |
 | Kotlin/Wasm (`wasmJs`) | yes | yes | yes: `kernelin-webgpu` |
 | Kotlin/JS (`js`, browser and Node.js) **(0.3.0)** | yes | yes | no |
@@ -386,8 +386,9 @@ class SaxpyTest {
 ## Run on the GPU
 
 GPU execution is provided by `kernelin-webgpu` on the **Kotlin/Wasm** (`wasmJs`) target, in any browser with WebGPU,
-and **(main)** on **Android** 8.0+ natively, with no browser or WebView (see [On Android](#on-android-main)).
-The API is the same on both.
+and **(main)** natively on **Android** 8.0+ (see [On Android](#on-android-main)) and in **desktop JVM apps** on
+macOS, Linux and Windows (see [On the desktop JVM](#on-the-desktop-jvm-main)), with no browser or WebView.
+The API is the same everywhere.
 
 ```kotlin
 import io.github.rajumark.kernelin.kernelSource
@@ -453,6 +454,9 @@ println(compute.description)                           // "GPU: apple metal-3 (M
 - If the GPU device is **lost** later, the run that hit it is redone on the CPU, and later runs use the CPU too.
   Other GPU errors (a rejected pipeline, out of memory) still throw: they are bugs to fix, not missing hardware.
 - `Compute.create(useGpu = false)` always uses the CPU, which is handy in tests and for comparing results.
+- `Compute` works on every host of `kernelin-webgpu`: Kotlin/Wasm, Android and the desktop JVM. In a JVM app it
+  uses the GPU through jWebGPU, and the CPU (all cores) on computers without one, on Linux ARM, or on a server
+  without a GPU driver.
 - Results match within the [differences between CPU and GPU](#differences-between-cpu-and-gpu) (Float rounding).
 - For data that stays on the GPU between runs, use `WebGpu` directly.
 
@@ -483,6 +487,46 @@ val y2 = result.floats("y")
   (several MB per ABI), so use App Bundles or ABI splits.
 - Benchmark on your phone: `scripts/bench-android-app.sh` builds and runs the `samples-android` app, which times
   the sample kernels on the phone's GPU and CPU and checks that the results match.
+
+### On the desktop JVM **(main)**
+
+In a plain JVM app (a server, a command-line tool, a desktop app, a test), `kernelin-webgpu` runs kernels on the
+computer's GPU through [jWebGPU](https://github.com/xpenatan/jWebGPU), which wraps [wgpu](https://wgpu.rs), the
+WebGPU engine of Firefox and Deno: Metal on macOS, Vulkan on Linux, Direct3D 12 or Vulkan on Windows. No browser.
+The Gradle plugin doesn't add it for JVM projects, so add the dependency yourself (in a Multiplatform project, to
+`jvmMain`):
+
+```kotlin
+dependencies {
+    implementation("io.github.rajumark:kernelin-webgpu:<next version>")
+}
+```
+
+```kotlin
+fun main() = runBlocking {
+    WebGpu.create().use { gpu ->                    // throws GpuException when there is no usable GPU
+        println(gpu.description)                    // for example "Apple M5 (Metal)"
+        gpu.dispatch(x.size) { saxpy(alpha = 2.5f, x = x, y = y) }   // y now holds the result
+    }
+}
+```
+
+- Works on **JDK 21** and newer (jWebGPU uses JNI, so no `--enable-preview` or JDK 22+ is needed).
+- Runs on **macOS** (Apple silicon and Intel), **Linux x64** and **Windows x64**. `WebGpu.isSupported` is `false`
+  elsewhere (for example Linux on ARM); use `KernelinCpu.dispatchParallel` there.
+- The jar brings the native wgpu library for all four desktops (about 4 MB each, compressed). To ship fewer,
+  exclude the `com.github.xpenatan.jWebGPU:webgpu-desktop-jni-wgpu_*` modules you don't need.
+- A server without a GPU can still run kernels with a software Vulkan driver such as lavapipe
+  (`apt-get install mesa-vulkan-drivers`): slower, but the results are right. `description` then ends in `, software)`.
+- Same threading as on Android: `load` and `run` are `suspend`, and every GPU call runs on one background thread
+  that the `WebGpu` owns. `GpuResult.bytes(name)` is a little-endian `java.nio.ByteBuffer`.
+- One buffer holds at most 2 GB (jWebGPU passes sizes as 32-bit ints).
+- jWebGPU 0.3 has no error scopes and no device-lost callback. Kernelin collects WebGPU errors while each `load`
+  and `run` happens (wgpu reports them right away), so they still throw `GpuException`; a lost device is noticed
+  from the error that reports it.
+- Benchmark on your computer: `gradle :samples:benchGpu` times the sample kernels on the GPU and the CPU and checks
+  that the results match. On an Apple M5, `waves` (64 rounds of `sin`/`cos` per element) takes 6.7 ms on the GPU and
+  589 ms on all 10 CPU cores ([raw data](https://github.com/rajumark/kernelin/blob/main/benchmarks/2026-10-20-apple-m5-jvm.json)).
 
 ### Rules for `run`
 
@@ -762,11 +806,11 @@ Runs kernels on the GPU when there is one, else on the CPU. In `kernelin-webgpu`
 | `wgsl(fqName)` | Reads `kernelin/<fqName>.wgsl` from the classpath |
 | `manifest(fqName)` | Reads `kernelin/<fqName>.json` from the classpath |
 
-### `WebGpu` (Kotlin/Wasm, and Android **(main)**)
+### `WebGpu` (Kotlin/Wasm, and Android and desktop JVM **(main)**)
 
 | Member | Description |
 |---|---|
-| `WebGpu.isSupported` | `true` when the browser exposes `navigator.gpu`; on Android, on API 26+ |
+| `WebGpu.isSupported` | `true` when the browser exposes `navigator.gpu`; on Android, on API 26+; on the JVM, on macOS, Linux x64 and Windows x64 |
 | `suspend WebGpu.create()` | Requests a GPU device. Throws `UnsupportedOperationException` without WebGPU |
 | `description` | Human-readable GPU description |
 | `suspend load(source)` | Compiles the shader and pipeline. Throws if the browser rejects the WGSL, `GpuException` if it rejects the pipeline |
@@ -891,7 +935,7 @@ To run a kernel from any WebGPU host: write `size` and the scalars (little-endia
 |---|---|
 | `kernelin-runtime` | Multiplatform (JVM, JS, Wasm, Native): `@Kernel`, `globalId()`, `KernelinCpu`, `kernelSource`, `KernelManifest` |
 | `kernelin-compiler-plugin` | K2 compiler plugin; `WgslKernelTranslator` turns Kotlin IR into WGSL |
-| `kernelin-webgpu` | Kotlin/Wasm WebGPU host |
+| `kernelin-webgpu` | WebGPU host: Kotlin/Wasm (browser), Android and desktop JVM (native) |
 | `kernelin-gradle-plugin` | `id("io.github.rajumark.kernelin")` |
 | `samples` | Sample kernels, CPU tests, benchmark, live demo |
 | `examples` | Standalone `hello-jvm` and `hello-multiplatform` projects |
@@ -914,7 +958,7 @@ Tests check every generated shader with the [naga](https://github.com/gfx-rs/wgp
 cargo install naga-cli
 ```
 
-On main, GPU differential tests also run kernels as Kotlin on the CPU and as WGSL on a real GPU (WebGPU through Deno) and compare the results. Install Deno to run them locally; without it they are skipped. CI runs them on a software GPU (llvmpipe through Vulkan, via Deno); they must pass, and CI fails if no GPU is found.
+On main, GPU differential tests also run kernels as Kotlin on the CPU and as WGSL on a real GPU (WebGPU through Deno) and compare the results. Install Deno to run them locally; without it they are skipped. CI runs them on a software GPU (llvmpipe through Vulkan, via Deno); they must pass, and CI fails if no GPU is found. The JVM GPU host's tests (`gradle :kernelin-webgpu:jvmTest`) run on the computer's real GPU; without one they are skipped, and CI runs them on lavapipe too.
 
 ```bash
 brew install deno
@@ -929,12 +973,13 @@ Quality checks, all part of `gradle build`:
 | ABI validation | The public API of every module is recorded in `api/` and checked by `checkKotlinAbi`; explicit API mode and KDoc on all public API |
 | Coverage | Kover, currently 86%; the build fails below 80%. Report: `gradle koverHtmlReport` |
 
-88 tests in total: 52 compiler tests (including 20 GPU tests, 9 IDE-check tests and the fuzzer), 9 runtime, 15 WebGPU host, 7 Gradle plugin, 5 samples.
+109 tests in total: 52 compiler tests (including 20 GPU tests, 9 IDE-check tests and the fuzzer), 9 runtime, 15 WebGPU host (Wasm), 21 JVM GPU host, 7 Gradle plugin, 5 samples.
 
 Other tasks:
 
 ```bash
 gradle :samples:bench -Pout=/path/to/folder   # benchmark; then serve the folder and open runner.html
+gradle :samples:benchGpu                       # same benchmark on this computer's GPU through the JVM GPU host
 scripts/bench-android.sh /path/to/folder      # same GPU benchmark in Chrome on a USB-connected Android phone
 scripts/bench-android-cpu.sh                 # the CPU side on the phone (Kotlin on ART)
 gradle :samples:exportDemo                     # rebuild the live demo into docs/demo
@@ -1042,7 +1087,7 @@ class MyKernelTest {
 }
 ```
 
-### GPU template (Kotlin/Wasm)
+### GPU template (Kotlin/Wasm; on main also Android and desktop JVM)
 
 ```kotlin
 val gpu = WebGpu.create()

@@ -32,6 +32,10 @@
 - `kernelin-webgpu` now runs on **Android** 8.0+ (API 26), natively through AndroidX WebGPU (Dawn on Vulkan, or
   OpenGL ES 3.1), without a browser or WebView. Same API as the Kotlin/Wasm host: `WebGpu.create()`, typed `dispatch`, `load`, `run`,
   data kept on the GPU, lost devices, `close()`. Every GPU call runs on one background thread owned by the `WebGpu`.
+- `kernelin-webgpu` now also runs on the **desktop JVM** (macOS, Linux x64, Windows x64), natively through
+  [jWebGPU](https://github.com/xpenatan/jWebGPU) and wgpu (Metal, Vulkan, Direct3D 12), without a browser. Same API
+  as the other hosts. Works on JDK 21+. JVM GPU tests compare every result with `KernelinCpu` on the real GPU (on
+  lavapipe in CI), and `gradle :samples:benchGpu` runs the benchmark on the computer's GPU.
 - The argument checks of `GpuKernel.run` moved to common code, so every GPU host rejects the same calls.
 - New `samples-android` app and `scripts/bench-android-app.sh`: the benchmark kernels on a phone's GPU (native, not
   Chrome) and CPU, with a GPU-vs-CPU result check. Android GPU tests: `gradle :kernelin-webgpu:connectedAndroidDeviceTest`

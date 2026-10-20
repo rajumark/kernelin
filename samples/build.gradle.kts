@@ -24,6 +24,10 @@ kotlin {
         wasmJsMain.dependencies {
             implementation(project(":kernelin-webgpu"))
         }
+        // The JVM benchmark can also run the kernels on this computer's GPU (gradle :samples:benchGpu).
+        jvmMain.dependencies {
+            implementation(project(":kernelin-webgpu"))
+        }
         jvmTest.dependencies {
             implementation(kotlin("test"))
             implementation(project.dependencies.platform(libs.junit.bom))
@@ -53,6 +57,17 @@ tasks.register<JavaExec>("bench") {
     maxHeapSize = "6g"
     val out = providers.gradleProperty("out").orElse(layout.buildDirectory.dir("kernelin-bench").map { it.asFile.path })
     argumentProviders.add(CommandLineArgumentProvider { listOf(out.get()) })
+}
+
+// gradle :samples:benchGpu times the same kernels on this computer's GPU through the JVM GPU host (no browser).
+tasks.register<JavaExec>("benchGpu") {
+    group = "kernelin"
+    description = "Runs the benchmarks on the CPU and on this computer's GPU, through the JVM GPU host."
+    dependsOn(jvmMain.compileTaskProvider)
+    classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+    mainClass.set("io.github.rajumark.kernelin.samples.BenchmarkKt")
+    maxHeapSize = "6g"
+    args("--gpu")
 }
 
 // Prints the benchmark's classpath, for scripts/bench-android-cpu.sh to turn into an Android dex.

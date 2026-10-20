@@ -114,7 +114,7 @@ val y2 = result.floats("y")
 |---|---|
 | `kernelin-runtime` | Multiplatform (JVM, JS, Wasm, iOS, macOS, tvOS, watchOS, Linux, Windows): `@Kernel`, `globalId()`, `KernelinCpu` (CPU runner), `kernelSource(::k)` |
 | `kernelin-compiler-plugin` | K2 compiler plugin; `WgslKernelTranslator` turns Kotlin IR into WGSL and embeds it where `kernelSource(::k)` is called |
-| `kernelin-webgpu` | Kotlin/Wasm WebGPU host: `WebGpu.create()`, `gpu.dispatch(n) { k(...) }`, `gpu.load(kernelSource(::k))`, `kernel.run(...)` |
+| `kernelin-webgpu` | WebGPU host for Kotlin/Wasm (browser), and on main natively for Android and desktop JVM apps (macOS, Linux, Windows; no browser): `WebGpu.create()`, `gpu.dispatch(n) { k(...) }`, `gpu.load(kernelSource(::k))`, `kernel.run(...)` |
 | `kernelin-gradle-plugin` | `id("io.github.rajumark.kernelin")`: one-line setup for JVM, Multiplatform and Android projects; `kernelin { enabled = false }` |
 | `samples` | Kernels in `commonMain` (JVM + Wasm), CPU tests and benchmark (JVM), live demo entry points (Wasm) |
 
@@ -126,6 +126,7 @@ when it's installed (`cargo install naga-cli`).
 ```bash
 gradle build
 gradle :samples:bench -Pout=/path/to/folder   # then serve the folder and open runner.html
+gradle :samples:benchGpu                       # same kernels on this computer's GPU through the JVM GPU host
 scripts/bench-android.sh /path/to/folder      # same GPU benchmark in Chrome on a USB-connected Android phone
 scripts/bench-android-cpu.sh                 # the CPU side on the phone (Kotlin on ART)
 scripts/bench-android-app.sh                 # GPU (native WebGPU, no browser) and CPU benchmark in an Android app

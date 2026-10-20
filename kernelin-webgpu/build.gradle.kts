@@ -13,6 +13,8 @@ kotlin {
     @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
     abiValidation()
     jvmToolchain(21)
+    // Desktop JVM (macOS, Linux, Windows): native WebGPU through jWebGPU (wgpu over JNI), no browser needed.
+    jvm()
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser {
@@ -41,6 +43,20 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.webgpu)
         }
+        jvmMain.dependencies {
+            implementation(libs.jwebgpu)
+            // The native library for each desktop: jWebGPU loads the one that fits the running OS and CPU.
+            runtimeOnly(libs.jwebgpu.wgpu.linux.x64)
+            runtimeOnly(libs.jwebgpu.wgpu.mac.arm64)
+            runtimeOnly(libs.jwebgpu.wgpu.mac.x64)
+            runtimeOnly(libs.jwebgpu.wgpu.windows.x64)
+        }
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(project.dependencies.platform(libs.junit.bom))
+            runtimeOnly(libs.junit.platform.launcher)
+        }
         wasmJsTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
@@ -56,6 +72,12 @@ kotlin {
 dependencies {
     // The host tests launch real @Kernel functions, so their compilation runs the compiler plugin.
     add("kotlinCompilerPluginClasspathWasmJsTest", project(":kernelin-compiler-plugin"))
+    // The JVM GPU tests launch real @Kernel functions too.
+    add("kotlinCompilerPluginClasspathJvmTest", project(":kernelin-compiler-plugin"))
     // The device tests write real @Kernel functions, so their compilation runs the compiler plugin.
     add("kotlinCompilerPluginClasspathAndroidDeviceTest", project(":kernelin-compiler-plugin"))
+}
+
+tasks.named<Test>("jvmTest") {
+    useJUnitPlatform()
 }

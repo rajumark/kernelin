@@ -31,7 +31,8 @@ jobs:
         run: cargo install naga-cli --version 30.0.1 --locked
 
       # GPU differential tests run every test kernel on the CPU and, through WebGPU in Deno, on a GPU.
-      # CI machines have no GPU, so lavapipe (Mesa's software Vulkan driver) plays the GPU.
+      # CI machines have no GPU, so lavapipe (Mesa's software Vulkan driver) plays the GPU. The JVM GPU host's
+      # tests (kernelin-webgpu jvmTest, part of the build below) use the same lavapipe through jWebGPU (wgpu).
       - name: Install software GPU (lavapipe)
         run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
       - uses: denoland/setup-deno@v2

@@ -12,9 +12,11 @@ import kotlin.random.Random
  * the generated shaders, input buffers, expected outputs and the CPU timings.
  *
  * Usage: `./gradlew :samples:bench -Pout=<dir>`, then open runner.html served from <dir>.
+ * `--gpu` (`gradle :samples:benchGpu`) times the same kernels on this computer's GPU instead, through the JVM GPU host.
  */
 fun main(args: Array<String>) {
     val timeOnly = "--time-only" in args
+    val gpu = "--gpu" in args
     val cores = Runtime.getRuntime().availableProcessors()
     println("Kernelin CPU benchmark - ${System.getProperty("java.vm.name")} ${System.getProperty("java.version")}, $cores cores")
 
@@ -25,6 +27,7 @@ fun main(args: Array<String>) {
         wavesCase(4 shl 20, rounds = 64),
         mandelbrotCase(2048, 2048, maxIter = 256),
     )
+    if (gpu) return benchmarkOnGpu(cases)
     // --time-only: just time the kernels and print the timings as JSON, e.g. on a phone (scripts/bench-android-cpu.sh).
     if (timeOnly) {
         cases.forEach { it.measure() }
@@ -42,7 +45,7 @@ fun main(args: Array<String>) {
     println("Wrote ${cases.size} cases to ${out.absolutePath}")
 }
 
-private class Case(
+internal class Case(
     val name: String,
     val kernel: String,
     val size: Int,
@@ -57,7 +60,7 @@ private class Case(
     var singleMs = 0.0
     var parallelMs = 0.0
 
-    private fun freshBuffers(): Map<String, Any> =
+    fun freshBuffers(): Map<String, Any> =
         (outputs.filterKeys { it !in inputs } + inputs).mapValues { (_, v) -> copy(v) }
 
     fun measure() {
