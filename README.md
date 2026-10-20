@@ -33,7 +33,7 @@ becomes
 
 ## Status
 
-**0.3.0 is released on Maven Central.** On an Apple M5, the generated shaders match the Kotlin CPU results and run
+**0.4.0 is released on Maven Central.** On an Apple M5, the generated shaders match the Kotlin CPU results and run
 up to 118× faster than all 10 CPU cores; on a mid-range Android phone (Adreno GPU, Chrome) up to 33× faster than all
 8 CPU cores (see the [website](https://rajumark.github.io/kernelin/#benchmarks) and `benchmarks/`). Since 0.2.0,
 IntelliJ IDEA and Android Studio underline code the GPU can't run while you type.
@@ -70,21 +70,21 @@ pluginManagement {
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.21"          // or kotlin("multiplatform"), or an Android plugin
-    id("io.github.rajumark.kernelin") version "0.3.0"
+    id("io.github.rajumark.kernelin") version "0.4.0"
 }
 ```
 
 The plugin runs the Kernelin compiler plugin on every compilation and adds
 `io.github.rajumark:kernelin-runtime` in Kotlin JVM, Multiplatform and Android projects (plus `kernelin-webgpu` to
 `wasmJsMain` in Multiplatform projects).
-Kernelin 0.3.0 is built for **Kotlin 2.4.21**; the compiler plugin API changes between Kotlin versions.
+Kernelin 0.4.0 is built for **Kotlin 2.4.21**; the compiler plugin API changes between Kotlin versions.
 
 | Artifact | What it is |
 |---|---|
-| `io.github.rajumark:kernelin-runtime:0.3.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu` (JVM, JS, Wasm, Native) |
-| `io.github.rajumark:kernelin-webgpu:0.3.0` | Kotlin/Wasm WebGPU host |
-| `io.github.rajumark:kernelin-compiler-plugin:0.3.0` | the K2 compiler plugin (added by the Gradle plugin) |
-| `io.github.rajumark:kernelin-gradle-plugin:0.3.0` | Gradle plugin `io.github.rajumark.kernelin` |
+| `io.github.rajumark:kernelin-runtime:0.4.0` | `@Kernel`, `globalId()`, `kernelSource()`, `KernelinCpu` (JVM, JS, Wasm, Native) |
+| `io.github.rajumark:kernelin-webgpu:0.4.0` | WebGPU host: Kotlin/Wasm (browser), Android and desktop JVM (native) |
+| `io.github.rajumark:kernelin-compiler-plugin:0.4.0` | the K2 compiler plugin (added by the Gradle plugin) |
+| `io.github.rajumark:kernelin-gradle-plugin:0.4.0` | Gradle plugin `io.github.rajumark.kernelin` |
 
 See [`examples/`](examples) for complete projects (`hello-jvm`, `hello-multiplatform`).
 
@@ -99,8 +99,8 @@ gpu.dispatch(n) { saxpy(alpha = 2.5f, x = x, y = y) }  // a normal call: names a
 On a device that may have no GPU, `Compute.create()` picks the GPU when there is one and the CPU when not, with the
 same `compute.dispatch(n) { saxpy(...) }` call.
 
-Typed `dispatch` and `Compute` are on `main` (not released yet). With 0.3.0, or for more control (data that stays on the GPU),
-load the kernel and pass arguments by name:
+Typed `dispatch` and `Compute` are new in 0.4.0. For more control (data that stays on the GPU), load the kernel and
+pass arguments by name:
 
 ```kotlin
 val kernel = gpu.load(kernelSource(::saxpy))           // the compiler embeds the WGSL here
@@ -118,7 +118,7 @@ val y2 = result.floats("y")
 |---|---|
 | `kernelin-runtime` | Multiplatform (JVM, JS, Wasm, iOS, macOS, tvOS, watchOS, Linux, Windows): `@Kernel`, `globalId()`, `KernelinCpu` (CPU runner), `kernelSource(::k)` |
 | `kernelin-compiler-plugin` | K2 compiler plugin; `WgslKernelTranslator` turns Kotlin IR into WGSL and embeds it where `kernelSource(::k)` is called |
-| `kernelin-webgpu` | WebGPU host for Kotlin/Wasm (browser), and on main natively for Android and desktop JVM apps (macOS, Linux, Windows; no browser): `WebGpu.create()`, `gpu.dispatch(n) { k(...) }`, `gpu.load(kernelSource(::k))`, `kernel.run(...)` |
+| `kernelin-webgpu` | WebGPU host for Kotlin/Wasm (browser), and natively (since 0.4.0) for Android and desktop JVM apps (macOS, Linux, Windows; no browser): `WebGpu.create()`, `gpu.dispatch(n) { k(...) }`, `gpu.load(kernelSource(::k))`, `kernel.run(...)` |
 | `kernelin-gradle-plugin` | `id("io.github.rajumark.kernelin")`: one-line setup for JVM, Multiplatform and Android projects; `kernelin { enabled = false }` |
 | `samples` | Kernels in `commonMain` (JVM + Wasm), CPU tests and benchmark (JVM), live demo entry points (Wasm) |
 

@@ -37,7 +37,7 @@ gradle publishToMavenLocal
 gradle publishToMavenCentral
 
 # 5. once live (10-30 min), build a separate project against Maven Central only, then tag
-git tag v0.3.0 && git push --tags
+git tag v0.4.0 && git push --tags
 ```
 
 Maven Central versions are permanent: a published version can never be changed or deleted.

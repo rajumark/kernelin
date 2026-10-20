@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0 (2026-10-20)
+
 - Automatic CPU fallback: `Compute.create()` opens the GPU when there is one and uses the CPU (`KernelinCpu`)
   when there isn't, and `compute.dispatch(n) { saxpy(alpha = 2f, x = xs, y = ys) }` runs the typed kernel call on
   whichever it has, so apps need one code path. A GPU device that is lost later switches to the CPU, and the run
