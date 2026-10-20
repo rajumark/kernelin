@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Kernelin: the same Kotlin code runs way faster on the GPU than on the CPU, up to 118 times faster" width="100%">
+</p>
+
 # Kernelin
 
 [![CI](https://github.com/rajumark/kernelin/actions/workflows/ci.yml/badge.svg)](https://github.com/rajumark/kernelin/actions/workflows/ci.yml)
