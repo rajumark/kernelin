@@ -1,6 +1,8 @@
 public final class io/github/rajumark/kernelin/webgpu/Compute : java/lang/AutoCloseable {
 	public static final field Companion Lio/github/rajumark/kernelin/webgpu/Compute$Companion;
 	public fun close ()V
+	public final fun dispatch (IIILkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun dispatch (IILkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun dispatch (ILkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getCpuReason ()Ljava/lang/String;
 	public final fun getDescription ()Ljava/lang/String;
@@ -39,7 +41,11 @@ public final class io/github/rajumark/kernelin/webgpu/GpuKernel : java/lang/Auto
 	public final fun getManifest ()Lio/github/rajumark/kernelin/KernelManifest;
 	public final fun getSource ()Lio/github/rajumark/kernelin/KernelSource;
 	public final fun isClosed ()Z
+	public final fun run (IIILjava/util/Map;Ljava/util/Map;Ljava/util/Set;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun run (IILjava/util/Map;Ljava/util/Map;Ljava/util/Set;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun run (ILjava/util/Map;Ljava/util/Map;Ljava/util/Set;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun run$default (Lio/github/rajumark/kernelin/webgpu/GpuKernel;IIILjava/util/Map;Ljava/util/Map;Ljava/util/Set;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun run$default (Lio/github/rajumark/kernelin/webgpu/GpuKernel;IILjava/util/Map;Ljava/util/Map;Ljava/util/Set;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static synthetic fun run$default (Lio/github/rajumark/kernelin/webgpu/GpuKernel;ILjava/util/Map;Ljava/util/Map;Ljava/util/Set;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
@@ -54,6 +60,8 @@ public final class io/github/rajumark/kernelin/webgpu/GpuResult {
 public final class io/github/rajumark/kernelin/webgpu/WebGpu : java/lang/AutoCloseable {
 	public static final field Companion Lio/github/rajumark/kernelin/webgpu/WebGpu$Companion;
 	public fun close ()V
+	public final fun dispatch (IIILkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun dispatch (IILkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun dispatch (ILkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getDescription ()Ljava/lang/String;
 	public final fun getLostReason ()Ljava/lang/String;

@@ -3,7 +3,7 @@
 //   deno run --unstable-webgpu --allow-read --allow-write gpu-run.mjs --probe
 //   deno run --unstable-webgpu --allow-read --allow-write gpu-run.mjs job.json
 //
-// job.json: { "wgsl": "<file>", "manifest": "<file>", "size": n, "scalars": { "name": value },
+// job.json: { "wgsl": "<file>", "manifest": "<file>", "size": n, "width": w, "height": h, "scalars": { "name": value },
 //             "buffers": { "name": { "length": n, "input": "<file or null>", "output": "<file>" } } }
 // Buffers are little-endian i32 / f32 files. Every read_write buffer is written to its "output" file.
 
@@ -56,16 +56,22 @@ const pipeline = device.createComputePipeline({
   compute: { module, entryPoint: manifest.entryPoint },
 });
 
-// Uniform: kernelin_size (u32), then each scalar in order, 4 bytes each, padded to 16 bytes.
-const uniformBytes = Math.ceil((1 + scalars.length) * 4 / 16) * 16;
+// Uniform: kernelin_size (u32), plus kernelin_width and kernelin_height (u32) for kernels with grid ids, then each
+// scalar in order, 4 bytes each, padded to 16 bytes. "width"/"height" are optional: a 1D launch is size x 1.
+const header = manifest.gridIds ? 3 : 1;
+const uniformBytes = Math.ceil((header + scalars.length) * 4 / 16) * 16;
 const view = new DataView(new ArrayBuffer(uniformBytes));
 view.setUint32(0, job.size, true);
+if (manifest.gridIds) {
+  view.setUint32(4, job.width ?? job.size, true);
+  view.setUint32(8, job.height ?? 1, true);
+}
 scalars.forEach((s, i) => {
   const v = job.scalars[s.name];
   if (v === undefined) throw new Error('missing scalar ' + s.name);
-  if (s.type === 'f32') view.setFloat32(4 + i * 4, v, true);
-  else if (s.type === 'bool') view.setUint32(4 + i * 4, v ? 1 : 0, true);
-  else view.setInt32(4 + i * 4, v, true);
+  if (s.type === 'f32') view.setFloat32(header * 4 + i * 4, v, true);
+  else if (s.type === 'bool') view.setUint32(header * 4 + i * 4, v ? 1 : 0, true);
+  else view.setInt32(header * 4 + i * 4, v, true);
 });
 const uniform = device.createBuffer({ size: uniformBytes, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 device.queue.writeBuffer(uniform, 0, view.buffer);

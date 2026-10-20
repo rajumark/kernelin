@@ -28,7 +28,11 @@ class KernelFuzzer(private val seed: Long) {
     /** Helpers only see their own parameters (no kernel arrays, no globalId). */
     private var inHelper = false
 
-    fun generate(name: String): String {
+    /**
+     * The kernel's source. With [gridIds], it also reads `globalIdX()`, `globalIdY()` and `globalIdZ()` (as `gx`,
+     * `gy`, `gz`), for a 3D launch.
+     */
+    fun generate(name: String, gridIds: Boolean = false): String {
         val helperCode = StringBuilder()
         repeat(r.nextInt(0, 3)) { h ->
             val helperName = "${name}_h$h"
@@ -41,7 +45,8 @@ class KernelFuzzer(private val seed: Long) {
             scopes.removeLast()
             helpers += helperName to arity
         }
-        scopes.addLast(mutableListOf("i" to false, "s" to false))
+        val ids = if (gridIds) listOf("gx" to "globalIdX()", "gy" to "globalIdY()", "gz" to "globalIdZ()") else emptyList()
+        scopes.addLast((listOf("i" to false, "s" to false) + ids.map { it.first to false }).toMutableList())
         repeat(r.nextInt(3, 8)) { statement(3) }
         val results = allVars().map { it.first }
         val combine = results.joinToString(" xor ") { "($it * ${r.nextInt(1, 1000)})" }
@@ -53,6 +58,7 @@ class KernelFuzzer(private val seed: Long) {
             appendLine("@Kernel")
             appendLine("fun $name(a: IntArray, outI: IntArray, s: Int) {")
             appendLine("    val i = globalId()")
+            for ((v, call) in ids) appendLine("    val $v = $call")
             append(out)
             appendLine("}")
         }

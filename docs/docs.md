@@ -221,6 +221,7 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 | Constants | `PI.toFloat()`, `E.toFloat()`, `1.5.toFloat()`, `1.5.toInt()` (a Double constant converted right away) |
 | Constant math **(0.2.0)** | All-constant expressions are computed at build time with Kotlin's rules (wrapping, Infinity/NaN), e.g. `-75 shl 28`; `Float.POSITIVE_INFINITY`, `NEGATIVE_INFINITY` and `NaN` constants are allowed |
 | Float checks **(0.2.0)** | `isNaN()`, `isInfinite()`, `isFinite()`; `Float.toInt()` matches Kotlin exactly (NaN → 0, too large → `Int.MAX_VALUE`, too small → `Int.MIN_VALUE`) |
+| 2D/3D thread ids **(main)** | `globalIdX()`, `globalIdY()`, `globalIdZ()` with `dispatch(width, height)` / `dispatch(width, height, depth)` launches; `globalId()` is then the row-major index `x + y * width` (see [2D and 3D launches](#example-2d-and-3d-launches-main)) |
 | Random numbers **(main)** | `randomInt(seed, index, stream)`, `randomFloat(...)` in `[0, 1)`, `randomIntBelow(bound, seed, index, stream)`, `randomNormal(...)`; the same bits on the CPU and the GPU (see [Random numbers](#random-numbers-main)) |
 | Helpers | Your own top-level functions and extension functions with `Int`/`Float`/`Boolean` parameters, returning `Int`, `Float`, `Boolean` or `Unit`. They become WGSL `fn`s. **(0.2.0)**: helpers can also take the kernel's `FloatArray`/`IntArray` parameters. |
 
@@ -237,7 +238,7 @@ Kernels are a strict subset of Kotlin: the parts that map directly onto GPU hard
 | Classes, objects, collections | Only scalars and arrays exist | Several arrays (one per field) |
 | Library calls (except `kotlin.math` and Kernelin's random functions) | Their code isn't available to translate | Your own helper function |
 | Default args, generics in helpers | Not supported yet | Pass every argument |
-| Structs / data classes, 2D/3D ids, shared memory, atomics | Not supported yet | Flat arrays, `id % width`, one writer per element |
+| Structs / data classes, shared memory, atomics | Not supported yet | Flat arrays, one writer per element |
 | A non-`Unit` return from a kernel | Results go into arrays | Write into an array parameter |
 | Calling another `@Kernel` | Kernels are entry points | Move shared code into a helper |
 
@@ -284,9 +285,47 @@ fun blur(input: FloatArray, out: FloatArray) {
 }
 ```
 
-### Example: 2D data
+### Example: 2D and 3D launches **(main)**
 
-Store 2D data in a flat array and compute the row and column from the id.
+Image and grid kernels can run as a `width x height` (or `width x height x depth`) grid of threads. Inside,
+`globalIdX()` is the column, `globalIdY()` the row and `globalIdZ()` the layer. `globalId()` is the row-major index
+`x + y * width + z * width * height`, so it is the cell's index in a flat array.
+
+```kotlin
+@Kernel
+fun blur(src: FloatArray, dst: FloatArray, width: Int, height: Int) {
+    val x = globalIdX()
+    val y = globalIdY()
+    var sum = 0f
+    var count = 0
+    for (dy in -1..1) for (dx in -1..1) {
+        if (x + dx in 0 until width && y + dy in 0 until height) {
+            sum += src[(y + dy) * width + x + dx]
+            count++
+        }
+    }
+    dst[globalId()] = sum / count
+}
+
+KernelinCpu.dispatch(width, height) { blur(pixels, out, width, height) }        // CPU
+gpu.dispatch(width, height) { blur(src = pixels, dst = out, width = width, height = height) }   // GPU
+gpu.load(kernelSource(::blur)).run(width, height, scalars, buffers)            // GPU, with names
+```
+
+- The 3D forms are `dispatch(width, height, depth)` and `run(width, height, depth, ...)`; `dispatchParallel` has
+  them too.
+- Threads run in the same order everywhere: row by row, layer by layer. CPU and GPU give the same ids.
+- In a 1D launch (`dispatch(n)`), `globalIdX()` equals `globalId()` and `globalIdY()` / `globalIdZ()` are 0.
+- A launch has at most `Int.MAX_VALUE` threads; a negative size or a bigger launch throws `IllegalArgumentException`.
+  Big grids are fine on the GPU: like 1D launches, they are spread over the GPU's workgroup limit (65535 per
+  dimension) and the extra threads are skipped.
+- Kernels that use these ids have two more uniform fields, `kernelin_width` and `kernelin_height`, after
+  `kernelin_size`. `KernelManifest.usesGridIds` and `KernelManifest.scalarOffset` tell custom hosts where the
+  scalars start. Kernels that don't use them keep the old layout.
+
+### Example: 2D data by hand
+
+Before 2D launches (and in 0.3.0), store 2D data in a flat array and compute the row and column from the id.
 
 ```kotlin
 @Kernel
@@ -323,9 +362,12 @@ KernelinCpu.dispatch(out.size) { vectorAdd(a, b, out) }
 
 // JVM only: split the ids across all CPU cores.
 KernelinCpu.dispatchParallel(out.size) { vectorAdd(a, b, out) }
+
+// 2D and 3D grids (main): see "Example: 2D and 3D launches".
+KernelinCpu.dispatch(width, height) { blur(pixels, out, width, height) }
 ```
 
-Calling `globalId()` outside a dispatch throws `IllegalStateException`.
+Calling `globalId()` (or `globalIdX()`, `globalIdY()`, `globalIdZ()`) outside a dispatch throws `IllegalStateException`.
 
 ### Unit testing a kernel
 
@@ -444,7 +486,8 @@ val y2 = result.floats("y")
 
 ### Rules for `run`
 
-- `size` is the number of threads (usually the length of the output array).
+- `size` is the number of threads (usually the length of the output array). For a 2D or 3D grid, pass
+  `run(width, height, ...)` or `run(width, height, depth, ...)` instead **(main)**.
 - `scalars` must contain **every** `Int` and `Float` parameter by its Kotlin name (and `Boolean`, since 0.2.0; the type is `Map<String, Any>`, source compatible with 0.1.0, but Wasm libraries built against 0.1.0 that call `run()` need a recompile).
 - `buffers` must contain **every** array parameter by its Kotlin name.
 - `run` checks the arguments before anything reaches the GPU: an unknown name, an `Int` parameter given a `Float`
@@ -603,6 +646,18 @@ fun globalId(): Int
 ```
 
 The index of the current thread, from `0` to `size - 1`. On the GPU it is the global invocation id; on the CPU it is set by `KernelinCpu`.
+In a 2D or 3D launch it is the row-major index `x + y * width + z * width * height`.
+
+### `globalIdX()`, `globalIdY()`, `globalIdZ()` **(main)**
+
+```kotlin
+fun globalIdX(): Int   // column: 0 until width
+fun globalIdY(): Int   // row:    0 until height (0 in a 1D launch)
+fun globalIdZ(): Int   // layer:  0 until depth  (0 in a 1D or 2D launch)
+```
+
+The position of the current thread in a `dispatch(width, height)` or `dispatch(width, height, depth)` launch. In a
+1D launch, `globalIdX()` equals `globalId()`. See [2D and 3D launches](#example-2d-and-3d-launches-main).
 
 ### Random numbers **(main)**
 
@@ -659,6 +714,8 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 | `params` | All parameters in Kotlin order |
 | `buffers` / `scalars` | Parameters filtered by kind |
 | `uniformBytes` | Size of the uniform buffer in bytes |
+| `usesGridIds` **(main)** | `true` when the kernel reads `globalIdX/Y/Z`; the uniform then has `kernelin_width` and `kernelin_height` (u32) after `kernelin_size` |
+| `scalarOffset` **(main)** | Byte offset of the first scalar in the uniform: 4, or 12 when `usesGridIds` |
 | `Param.name`, `kind`, `type`, `binding`, `access` | `kind` is `buffer` or `scalar`; `type` is `f32`, `i32` or `u32` (plus `bool` since 0.2.0); `access` is `read` or `read_write` |
 
 ### `KernelinCpu`
@@ -667,6 +724,8 @@ Returns the generated shader for a kernel: `kernelSource(::saxpy)`. The compiler
 |---|---|---|
 | `dispatch(size) { ... }` | all (JVM, JS, Wasm, Native) | Runs the block once per id in `0 until size` on the calling thread |
 | `dispatchParallel(size) { ... }` | JVM | Same, split across all CPU cores |
+| `dispatch(width, height) { ... }`, `dispatch(width, height, depth) { ... }` **(main)** | all | A 2D / 3D grid, row by row; read the position with `globalIdX/Y/Z()` |
+| `dispatchParallel(width, height)`, `dispatchParallel(width, height, depth)` **(main)** | JVM | Same, split across all CPU cores |
 
 ### `KernelLaunch` **(main)**
 
@@ -680,6 +739,7 @@ as the one `WebGpu.dispatch` takes). For GPU hosts; users just write the block.
 | `scalars` | `Int` / `Float` / `Boolean` arguments by parameter name |
 | `arrays` | `IntArray` / `FloatArray` arguments by parameter name (the same array objects) |
 | `runOnCpu(size)` | Runs the same call on the CPU for ids `0 until size` (all cores on the JVM and Android) |
+| `runOnCpu(width, height)`, `runOnCpu(width, height, depth)` | The same for a 2D / 3D grid |
 
 ### `Compute` **(main)**
 
@@ -689,6 +749,7 @@ Runs kernels on the GPU when there is one, else on the CPU. In `kernelin-webgpu`
 |---|---|
 | `suspend Compute.create(useGpu = true)` | Opens the GPU, or uses the CPU when there is none (or when `useGpu` is false). Never throws for missing hardware |
 | `suspend dispatch(size) { kernel(...) }` | Runs one typed kernel call on the GPU or the CPU; the arrays the kernel writes hold the results |
+| `suspend dispatch(width, height) { ... }`, `dispatch(width, height, depth) { ... }` | The same for a 2D / 3D grid (see `globalIdX()`) |
 | `isGpu` | `true` while kernels run on the GPU |
 | `cpuReason` | Why kernels run on the CPU (no GPU, lost device, `useGpu = false`, closed), or `null` |
 | `description` | `GPU: <name>` or `CPU (<reason>)`, for logs |
@@ -710,6 +771,7 @@ Runs kernels on the GPU when there is one, else on the CPU. In `kernelin-webgpu`
 | `description` | Human-readable GPU description |
 | `suspend load(source)` | Compiles the shader and pipeline. Throws if the browser rejects the WGSL, `GpuException` if it rejects the pipeline |
 | `suspend dispatch(size) { k(...) }` | Typed launch: runs one `@Kernel` call on the GPU, writes the results into the arrays the kernel writes, returns the `GpuResult`. Loads the kernel once **(main)** |
+| `suspend dispatch(width, height) { k(...) }`, `dispatch(width, height, depth) { k(...) }` **(main)** | The same for a 2D / 3D grid of threads (see `globalIdX()`) |
 | `isLost`, `lostReason` | Whether the browser took the device away, and why **(since 0.3.0)** |
 | `onLost` | Called once with the reason when the device is lost (not after `close()`) **(since 0.3.0)** |
 | `onUncapturedError` | Called with WebGPU errors that happen outside `load` and `run` **(since 0.3.0)** |
@@ -721,6 +783,7 @@ Runs kernels on the GPU when there is one, else on the CPU. In `kernelin-webgpu`
 |---|---|
 | `source`, `manifest` | What this kernel was built from |
 | `suspend run(size, scalars, buffers, readBack = null)` | Uploads inputs, dispatches `size` threads, reads back the `read_write` buffers named in `readBack` (null: all). Runs of one kernel wait for each other. Throws `GpuException` on WebGPU errors |
+| `suspend run(width, height, scalars, buffers, readBack = null)`, `run(width, height, depth, ...)` **(main)** | The same for a 2D / 3D grid of threads |
 | `close()`, `isClosed` | Frees the kernel's GPU buffers; later runs throw `IllegalStateException`. `AutoCloseable` **(since 0.3.0)** |
 
 ### `GpuData`
@@ -939,7 +1002,7 @@ Follow every rule. If a rule can't be met, don't write a kernel; write normal Ko
 6. No lambdas except `repeat(n) { }`: no `forEach {}`, `map {}`. Use `for (k in 0 until n)`, `while`, or `do-while`.
 7. Math only from `kotlin.math` with Float arguments (`sqrt`, `sin`, `cos`, `exp`, `pow`, `abs`, `min`, `max`, …). For π use `PI.toFloat()`.
 8. Helper functions must be top-level, take only `Int`/`Float`/`Boolean`, return `Int`/`Float`/`Boolean`/`Unit`, not recurse, have no default arguments. They may take the kernel's own array parameters.
-9. 2D data is a flat array: `x = i % width`, `y = i / width`.
+9. 2D data is a flat, row-major array. On main, launch a grid with `dispatch(width, height)` and read `globalIdX()` / `globalIdY()` (`globalId()` is then `x + y * width`); with 0.3.0, use `x = i % width`, `y = i / width`.
 10. Guard neighbour reads: `if (j >= 0 && j < a.size)`. The bounds check against `size` is automatic only for `globalId()` itself.
 11. Never divide by a value that can be zero without a check: `x / 0f` is undefined on the GPU (it is not guaranteed to be `Infinity` or `NaN`).
 12. For random numbers use Kernelin's `randomFloat(seed, i, stream)`, `randomInt`, `randomIntBelow` or `randomNormal` (`import io.github.rajumark.kernelin.*`), with a different `stream` for every draw in one thread. Don't use `kotlin.random` and don't write your own hash.
@@ -1017,7 +1080,7 @@ Test every kernel on the CPU with KernelinCpu.dispatch(size) { kernel(...) }.
 
 **Next (towards 1.0)**
 
-- 2D/3D ids, workgroup shared memory and atomics (for matrix multiply, reductions and histograms)
+- Workgroup shared memory and atomics (for matrix multiply, reductions and histograms); 2D/3D ids are done on main
 - Vector types
 - Android: kernels already run and match on a phone GPU in Chrome; next, AndroidX WebGPU natively
 - Done in 0.2.0: IDE errors while you type (FIR checkers), `Boolean` parameters, arrays in helpers, `repeat`, labeled `break`/`continue`, `in` ranges, `isNaN`, Kotlin-exact constant math and shifts; GPU-vs-CPU differential tests, a fuzzer, ABI checks and coverage gates

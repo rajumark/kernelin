@@ -1,3 +1,4 @@
 package io.github.rajumark.kernelin
 
-internal actual fun dispatchOnAllCores(size: Int, kernel: () -> Unit) = KernelinCpu.dispatch(size, kernel)
+internal actual fun dispatchOnAllCores(width: Int, height: Int, depth: Int, kernel: () -> Unit) =
+    KernelinCpu.dispatch(width, height, depth, kernel)

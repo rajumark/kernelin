@@ -10,7 +10,17 @@ public class KernelManifest(
     public val workgroupSize: Int,
     /** Kernel parameters in Kotlin order. */
     public val params: List<Param>,
+    /**
+     * True when the kernel reads `globalIdX()`, `globalIdY()` or `globalIdZ()`. The uniform then holds the launch
+     * width and height right after the size (see [scalarOffset]).
+     */
+    public val usesGridIds: Boolean = false,
 ) {
+    /** The 0.3.0 constructor, kept so code compiled against it still links. */
+    @Deprecated("Kept for binary compatibility", level = DeprecationLevel.HIDDEN)
+    public constructor(kernel: String, entryPoint: String, workgroupSize: Int, params: List<Param>) :
+        this(kernel, entryPoint, workgroupSize, params, usesGridIds = false)
+
     /** One kernel parameter: an array (storage buffer) or an Int/Float/Boolean (uniform field). */
     public class Param(
         /** Parameter name, as written in Kotlin (renamed only if it clashes with a WGSL keyword). */
@@ -35,8 +45,15 @@ public class KernelManifest(
     /** The Int/Float/Boolean parameters, in Kotlin order (the order of the uniform fields). */
     public val scalars: List<Param> get() = params.filter { !it.isBuffer }
 
-    /** Uniform size in bytes: `kernelin_size: u32` plus one 4-byte field per scalar, padded to 16. */
-    public val uniformBytes: Int get() = (1 + scalars.size) * 4 + 15 and 15.inv()
+    /**
+     * Byte offset of the first scalar in the uniform. The uniform starts with `kernelin_size: u32` (the thread
+     * count); kernels that [usesGridIds] also have `kernelin_width: u32` and `kernelin_height: u32` after it.
+     * Each scalar then takes 4 bytes, in manifest order.
+     */
+    public val scalarOffset: Int get() = if (usesGridIds) 12 else 4
+
+    /** Uniform size in bytes: the [scalarOffset] header plus one 4-byte field per scalar, padded to 16. */
+    public val uniformBytes: Int get() = scalarOffset + scalars.size * 4 + 15 and 15.inv()
 
     /** Parses the manifests that the compiler plugin generates. */
     public companion object {
@@ -59,6 +76,7 @@ public class KernelManifest(
                 entryPoint = root["entryPoint"] as String,
                 workgroupSize = (root["workgroupSize"] as Double).toInt(),
                 params = params,
+                usesGridIds = root["gridIds"] as Boolean? ?: false,
             )
         }
     }

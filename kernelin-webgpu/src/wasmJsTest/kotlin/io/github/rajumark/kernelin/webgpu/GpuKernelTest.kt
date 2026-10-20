@@ -5,6 +5,9 @@ package io.github.rajumark.kernelin.webgpu
 import io.github.rajumark.kernelin.Kernel
 import io.github.rajumark.kernelin.KernelSource
 import io.github.rajumark.kernelin.globalId
+import io.github.rajumark.kernelin.globalIdX
+import io.github.rajumark.kernelin.globalIdY
+import io.github.rajumark.kernelin.globalIdZ
 import kotlinx.coroutines.async
 import kotlinx.coroutines.await
 import kotlinx.coroutines.test.runTest
@@ -251,6 +254,46 @@ class GpuKernelTest {
     }
 
     @Test
+    fun gridLaunchesSendTheWidthAndHeightBeforeTheScalars() = runTest {
+        val gpu = WebGpu.create()
+        fakeOnDispatchFill(": cells", 5)
+        val cells = IntArray(12)
+        gpu.dispatch(4, 3) { gridCells(cells = cells, factor = 1.5f) }
+        assertContentEquals(IntArray(12) { 5 }, cells)
+        // size, width, height, then factor.
+        assertContentEquals(intArrayOf(12, 4, 3, 1.5f.toRawBits()), fakeUniform(": scalars").copyOf(4))
+        gpu.dispatch(2, 3, 2) { gridCells(cells = cells, factor = 2f) }
+        assertContentEquals(intArrayOf(12, 2, 3, 2f.toRawBits()), fakeUniform(": scalars").copyOf(4))
+        // A 1D launch of a grid kernel is size x 1.
+        gpu.dispatch(12) { gridCells(cells = cells, factor = 0f) }
+        assertContentEquals(intArrayOf(12, 12, 1, 0), fakeUniform(": scalars").copyOf(4))
+
+        // The untyped run takes the same shapes.
+        val k = gpu.load(KernelSource("test.grid", "// fake", gridManifest))
+        k.run(5, 7, mapOf("factor" to 3f), mapOf("cells" to GpuData.empty(35)))
+        assertContentEquals(intArrayOf(35, 5, 7, 3f.toRawBits()), fakeUniform("test.grid: scalars").copyOf(4))
+        k.run(2, 2, 2, mapOf("factor" to 1f), mapOf("cells" to GpuData.empty(8)))
+        assertContentEquals(intArrayOf(8, 2, 2, 1f.toRawBits()), fakeUniform("test.grid: scalars").copyOf(4))
+
+        assertFailsWith<IllegalArgumentException> { k.run(-1, 2, mapOf("factor" to 1f), mapOf("cells" to GpuData.empty(8))) }
+        val e = assertFailsWith<IllegalArgumentException> { k.run(65536, 65536, mapOf("factor" to 1f), mapOf("cells" to GpuData.empty(8))) }
+        assertContains(e.message!!, "at most")
+        assertFailsWith<IllegalArgumentException> { gpu.dispatch(3, -2) { gridCells(cells = cells, factor = 0f) } }
+        // 1D kernels keep the old uniform: size, then the scalars.
+        kernel().run(4, 3, scalars, mapOf("a" to GpuData.empty(12), "out" to GpuData.empty(12)))
+        assertContentEquals(intArrayOf(12, 2, 1), fakeUniform("test.k: scalars").copyOf(3))
+    }
+
+    private val gridManifest = """
+        { "kernel": "test.grid", "entryPoint": "main", "workgroupSize": 64, "gridIds": true,
+          "uniform": { "binding": 0, "fields": [] },
+          "params": [
+            { "name": "cells", "kind": "buffer", "type": "i32", "binding": 1, "access": "read_write" },
+            { "name": "factor", "kind": "scalar", "type": "f32" }
+          ] }
+    """
+
+    @Test
     fun typedDispatchFailsAfterClose() = runTest {
         val gpu = WebGpu.create()
         val out = IntArray(1)
@@ -279,6 +322,11 @@ fun scaleInto(factor: Int, on: Boolean, a: FloatArray, out: IntArray) {
     if (on) out[i] = (a[i] * factor).toInt()
 }
 
+@Kernel
+fun gridCells(cells: IntArray, factor: Float) {
+    cells[globalId()] = (globalIdX() * factor).toInt() + globalIdY() * 100 + globalIdZ() * 10000
+}
+
 internal fun fakeOnDispatchFill(labelEnd: String, value: Int): Unit = js("""{
     globalThis.fakeGpu.onDispatch = () => {
         for (const o of globalThis.fakeGpu.objects) {
@@ -288,7 +336,7 @@ internal fun fakeOnDispatchFill(labelEnd: String, value: Int): Unit = js("""{
 }""")
 
 /** The ints of the newest live buffer whose label ends with [labelEnd]. */
-private fun fakeUniform(labelEnd: String): IntArray {
+internal fun fakeUniform(labelEnd: String): IntArray {
     val n = fakeBufferInts(labelEnd, -1)
     return IntArray(n) { fakeBufferInts(labelEnd, it) }
 }

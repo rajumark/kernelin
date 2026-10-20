@@ -75,20 +75,43 @@ internal fun workgroupGrid(size: Int, workgroupSize: Int, maxPerDimension: Int):
 }
 
 /**
- * The bytes of the uniform buffer: the thread count, then each scalar parameter in manifest order, as
- * little-endian 32-bit values, padded to `manifest.uniformBytes`. [scalars] must have passed [checkRunArguments].
+ * One launch: [size] threads, as a [width] x [height] x [depth] grid. A 1D launch is `size x 1 x 1`.
+ * The GPU runs the threads in a line, like `KernelinCpu`, and the shader splits the id into x/y/z.
  */
-internal fun uniformBytes(source: KernelSource, size: Int, scalars: Map<String, Any>): ByteArray {
+internal class LaunchShape(val size: Int, val width: Int, val height: Int, val depth: Int) {
+    companion object {
+        fun linear(size: Int) = LaunchShape(size, size, 1, 1)
+
+        /** Throws [IllegalArgumentException] for negative sizes or more than Int.MAX_VALUE threads. */
+        fun grid(width: Int, height: Int, depth: Int): LaunchShape {
+            require(width >= 0 && height >= 0 && depth >= 0) { "Launch sizes can't be negative, but got $width x $height x $depth" }
+            val size = width.toLong() * height * depth
+            require(size <= Int.MAX_VALUE) { "A launch has at most ${Int.MAX_VALUE} threads, but $width x $height x $depth is $size" }
+            return LaunchShape(size.toInt(), width, height, depth)
+        }
+    }
+}
+
+/**
+ * The bytes of the uniform buffer: the thread count (plus the launch width and height for kernels that use grid
+ * ids), then each scalar parameter in manifest order, as little-endian 32-bit values, padded to
+ * `manifest.uniformBytes`. [scalars] must have passed [checkRunArguments].
+ */
+internal fun uniformBytes(source: KernelSource, shape: LaunchShape, scalars: Map<String, Any>): ByteArray {
     val manifest = source.manifest
     val bytes = ByteArray(manifest.uniformBytes)
     fun put(offset: Int, bits: Int) {
         for (i in 0 until 4) bytes[offset + i] = (bits ushr (8 * i)).toByte()
     }
-    put(0, size)
+    put(0, shape.size)
+    if (manifest.usesGridIds) {
+        put(4, shape.width)
+        put(8, shape.height)
+    }
     manifest.scalars.forEachIndexed { i, p ->
         val v = scalars.getValue(p.name)
         put(
-            4 + i * 4,
+            manifest.scalarOffset + i * 4,
             when (p.type) {
                 "f32" -> (v as Number).toFloat().toRawBits()
                 "bool" -> if (v as Boolean) 1 else 0

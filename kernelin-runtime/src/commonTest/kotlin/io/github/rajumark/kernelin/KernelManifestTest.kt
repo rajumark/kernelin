@@ -42,4 +42,17 @@ class KernelManifestTest {
         )
         assertEquals(32, KernelManifest.parse(seven).uniformBytes)
     }
+
+    @Test
+    fun gridIdsAddWidthAndHeightBeforeTheScalars() {
+        val plain = KernelManifest.parse(json)
+        assertEquals(false, plain.usesGridIds)
+        assertEquals(4, plain.scalarOffset)
+        val grid = KernelManifest.parse(json.replace("\"workgroupSize\": 64,", "\"workgroupSize\": 64, \"gridIds\": true,"))
+        assertEquals(true, grid.usesGridIds)
+        assertEquals(12, grid.scalarOffset)
+        assertEquals(16, grid.uniformBytes)
+        val twoScalars = KernelManifest("k", "main", 64, plain.params + plain.params.first(), usesGridIds = true)
+        assertEquals(32, twoScalars.uniformBytes)
+    }
 }

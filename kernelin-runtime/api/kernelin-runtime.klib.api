@@ -30,6 +30,8 @@ final class io.github.rajumark.kernelin/KernelLaunch { // io.github.rajumark.ker
     final fun cpu(kotlin/Function0<kotlin/Unit>) // io.github.rajumark.kernelin/KernelLaunch.cpu|cpu(kotlin.Function0<kotlin.Unit>){}[0]
     final fun kernel(io.github.rajumark.kernelin/KernelSource) // io.github.rajumark.kernelin/KernelLaunch.kernel|kernel(io.github.rajumark.kernelin.KernelSource){}[0]
     final fun runOnCpu(kotlin/Int) // io.github.rajumark.kernelin/KernelLaunch.runOnCpu|runOnCpu(kotlin.Int){}[0]
+    final fun runOnCpu(kotlin/Int, kotlin/Int) // io.github.rajumark.kernelin/KernelLaunch.runOnCpu|runOnCpu(kotlin.Int;kotlin.Int){}[0]
+    final fun runOnCpu(kotlin/Int, kotlin/Int, kotlin/Int) // io.github.rajumark.kernelin/KernelLaunch.runOnCpu|runOnCpu(kotlin.Int;kotlin.Int;kotlin.Int){}[0]
 
     final object Companion { // io.github.rajumark.kernelin/KernelLaunch.Companion|null[0]
         final fun capture(kotlin/Function1<io.github.rajumark.kernelin/KernelLaunch, kotlin/Unit>): io.github.rajumark.kernelin/KernelLaunch // io.github.rajumark.kernelin/KernelLaunch.Companion.capture|capture(kotlin.Function1<io.github.rajumark.kernelin.KernelLaunch,kotlin.Unit>){}[0]
@@ -38,6 +40,7 @@ final class io.github.rajumark.kernelin/KernelLaunch { // io.github.rajumark.ker
 
 final class io.github.rajumark.kernelin/KernelManifest { // io.github.rajumark.kernelin/KernelManifest|null[0]
     constructor <init>(kotlin/String, kotlin/String, kotlin/Int, kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param>) // io.github.rajumark.kernelin/KernelManifest.<init>|<init>(kotlin.String;kotlin.String;kotlin.Int;kotlin.collections.List<io.github.rajumark.kernelin.KernelManifest.Param>){}[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/Int, kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param>, kotlin/Boolean = ...) // io.github.rajumark.kernelin/KernelManifest.<init>|<init>(kotlin.String;kotlin.String;kotlin.Int;kotlin.collections.List<io.github.rajumark.kernelin.KernelManifest.Param>;kotlin.Boolean){}[0]
 
     final val buffers // io.github.rajumark.kernelin/KernelManifest.buffers|{}buffers[0]
         final fun <get-buffers>(): kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param> // io.github.rajumark.kernelin/KernelManifest.buffers.<get-buffers>|<get-buffers>(){}[0]
@@ -47,10 +50,14 @@ final class io.github.rajumark.kernelin/KernelManifest { // io.github.rajumark.k
         final fun <get-kernel>(): kotlin/String // io.github.rajumark.kernelin/KernelManifest.kernel.<get-kernel>|<get-kernel>(){}[0]
     final val params // io.github.rajumark.kernelin/KernelManifest.params|{}params[0]
         final fun <get-params>(): kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param> // io.github.rajumark.kernelin/KernelManifest.params.<get-params>|<get-params>(){}[0]
+    final val scalarOffset // io.github.rajumark.kernelin/KernelManifest.scalarOffset|{}scalarOffset[0]
+        final fun <get-scalarOffset>(): kotlin/Int // io.github.rajumark.kernelin/KernelManifest.scalarOffset.<get-scalarOffset>|<get-scalarOffset>(){}[0]
     final val scalars // io.github.rajumark.kernelin/KernelManifest.scalars|{}scalars[0]
         final fun <get-scalars>(): kotlin.collections/List<io.github.rajumark.kernelin/KernelManifest.Param> // io.github.rajumark.kernelin/KernelManifest.scalars.<get-scalars>|<get-scalars>(){}[0]
     final val uniformBytes // io.github.rajumark.kernelin/KernelManifest.uniformBytes|{}uniformBytes[0]
         final fun <get-uniformBytes>(): kotlin/Int // io.github.rajumark.kernelin/KernelManifest.uniformBytes.<get-uniformBytes>|<get-uniformBytes>(){}[0]
+    final val usesGridIds // io.github.rajumark.kernelin/KernelManifest.usesGridIds|{}usesGridIds[0]
+        final fun <get-usesGridIds>(): kotlin/Boolean // io.github.rajumark.kernelin/KernelManifest.usesGridIds.<get-usesGridIds>|<get-usesGridIds>(){}[0]
     final val workgroupSize // io.github.rajumark.kernelin/KernelManifest.workgroupSize|{}workgroupSize[0]
         final fun <get-workgroupSize>(): kotlin/Int // io.github.rajumark.kernelin/KernelManifest.workgroupSize.<get-workgroupSize>|<get-workgroupSize>(){}[0]
 
@@ -95,9 +102,14 @@ final class io.github.rajumark.kernelin/KernelSource { // io.github.rajumark.ker
 
 final object io.github.rajumark.kernelin/KernelinCpu { // io.github.rajumark.kernelin/KernelinCpu|null[0]
     final fun dispatch(kotlin/Int, kotlin/Function0<kotlin/Unit>) // io.github.rajumark.kernelin/KernelinCpu.dispatch|dispatch(kotlin.Int;kotlin.Function0<kotlin.Unit>){}[0]
+    final fun dispatch(kotlin/Int, kotlin/Int, kotlin/Function0<kotlin/Unit>) // io.github.rajumark.kernelin/KernelinCpu.dispatch|dispatch(kotlin.Int;kotlin.Int;kotlin.Function0<kotlin.Unit>){}[0]
+    final fun dispatch(kotlin/Int, kotlin/Int, kotlin/Int, kotlin/Function0<kotlin/Unit>) // io.github.rajumark.kernelin/KernelinCpu.dispatch|dispatch(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Function0<kotlin.Unit>){}[0]
 }
 
 final fun io.github.rajumark.kernelin/globalId(): kotlin/Int // io.github.rajumark.kernelin/globalId|globalId(){}[0]
+final fun io.github.rajumark.kernelin/globalIdX(): kotlin/Int // io.github.rajumark.kernelin/globalIdX|globalIdX(){}[0]
+final fun io.github.rajumark.kernelin/globalIdY(): kotlin/Int // io.github.rajumark.kernelin/globalIdY|globalIdY(){}[0]
+final fun io.github.rajumark.kernelin/globalIdZ(): kotlin/Int // io.github.rajumark.kernelin/globalIdZ|globalIdZ(){}[0]
 final fun io.github.rajumark.kernelin/kernelSource(kotlin.reflect/KFunction<*>): io.github.rajumark.kernelin/KernelSource // io.github.rajumark.kernelin/kernelSource|kernelSource(kotlin.reflect.KFunction<*>){}[0]
 final fun io.github.rajumark.kernelin/randomFloat(kotlin/Int, kotlin/Int, kotlin/Int = ...): kotlin/Float // io.github.rajumark.kernelin/randomFloat|randomFloat(kotlin.Int;kotlin.Int;kotlin.Int){}[0]
 final fun io.github.rajumark.kernelin/randomInt(kotlin/Int, kotlin/Int, kotlin/Int = ...): kotlin/Int // io.github.rajumark.kernelin/randomInt|randomInt(kotlin.Int;kotlin.Int;kotlin.Int){}[0]

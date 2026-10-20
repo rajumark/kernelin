@@ -541,4 +541,91 @@ class GpuDifferentialTest {
         assertEquals(0.0, mean, 0.03)
         assertEquals(1.0, variance, 0.04)
     }
+
+    @Test
+    fun `2D thread ids give each cell its column and row`() {
+        val (w, h) = 37 to 23
+        val r = GpuDifferential.assertSame(
+            GpuDifferential.compile(
+                """
+                fun row(): Int = globalIdY()
+
+                @Kernel
+                fun k(cells: IntArray, ids: IntArray, scale: Float) {
+                    val x = globalIdX()
+                    cells[globalId()] = (x * scale).toInt() + row() * 1000 + globalIdZ() * 1000000
+                    ids[globalId()] = x + row() * $w
+                }
+                """,
+            ),
+            "k", GpuDifferential.Grid(w, h), mapOf("cells" to IntArray(w * h), "ids" to IntArray(w * h), "scale" to 2f),
+        )
+        val cells = r.cpu.getValue("cells") as IntArray
+        assertEquals(36 * 2 + 22 * 1000, cells[w * h - 1])
+        assertEquals((0 until w * h).toList(), (r.cpu.getValue("ids") as IntArray).toList(), "globalId() is x + y * width")
+    }
+
+    @Test
+    fun `3D thread ids, and the same kernel in a 1D launch`() {
+        val c = GpuDifferential.compile(
+            """
+            @Kernel
+            fun k(out: IntArray, offset: Int) {
+                out[globalId()] = globalIdX() + globalIdY() * 100 + globalIdZ() * 10000 + offset
+            }
+            """,
+        )
+        val (w, h, d) = Triple(9, 5, 4)
+        val r = GpuDifferential.assertSame(c, "k", GpuDifferential.Grid(w, h, d), mapOf("out" to IntArray(w * h * d), "offset" to 7))
+        assertEquals(8 + 4 * 100 + 3 * 10000 + 7, (r.cpu.getValue("out") as IntArray).last())
+        // In a 1D launch, globalIdX() is globalId() and y = z = 0.
+        val line = GpuDifferential.assertSame(c, "k", 100, mapOf("out" to IntArray(100), "offset" to 0))
+        assertEquals((0 until 100).toList(), (line.cpu.getValue("out") as IntArray).toList())
+    }
+
+    @Test
+    fun `2D box blur reads its neighbors like an image kernel`() {
+        val (w, h) = 61 to 45
+        val c = GpuDifferential.compile(
+            """
+            @Kernel
+            fun blur(src: FloatArray, dst: FloatArray, width: Int, height: Int) {
+                val x = globalIdX()
+                val y = globalIdY()
+                var sum = 0f
+                var count = 0
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = x + dx
+                    val ny = y + dy
+                    if (nx in 0 until width && ny in 0 until height) {
+                        sum += src[ny * width + nx]
+                        count++
+                    }
+                }
+                dst[y * width + x] = sum / count
+            }
+            """,
+        )
+        val args = mapOf("src" to floats(w * h, 21), "dst" to FloatArray(w * h), "width" to w, "height" to h)
+        GpuDifferential.assertSame(c, "blur", GpuDifferential.Grid(w, h), args, relTol = 1e-5, absTol = 1e-5)
+    }
+
+    @Test
+    fun `a 2D launch bigger than 65535 workgroups still covers every cell once`() {
+        // 4100 x 1100 threads need 70470 workgroups of 64: more than one dimension holds, so the host spills
+        // into a second dimension and the shader skips the extra threads.
+        val (w, h) = 4100 to 1100
+        val r = GpuDifferential.assertSame(
+            GpuDifferential.compile(
+                """
+                @Kernel
+                fun k(out: IntArray) {
+                    out[globalId()] += globalIdX() * 2 + globalIdY() * 3 + 1
+                }
+                """,
+            ),
+            "k", GpuDifferential.Grid(w, h), mapOf("out" to IntArray(w * h)),
+        )
+        assertEquals((w - 1) * 2 + (h - 1) * 3 + 1, (r.gpu.getValue("out") as IntArray).last())
+    }
 }

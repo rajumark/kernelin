@@ -56,6 +56,14 @@ object GpuDifferential {
     fun run(source: String, kernel: String, size: Int, args: Map<String, Any>): Result =
         run(compile(source), kernel, size, args)
 
+    /**
+     * A launch shape: `width x height x depth` threads, like `KernelinCpu.dispatch(width, height, depth)`.
+     * Every `size` parameter below is a 1D launch (`size x 1 x 1`).
+     */
+    class Grid(val width: Int, val height: Int = 1, val depth: Int = 1) {
+        val size get() = width * height * depth
+    }
+
     /** Compiles [source] (Kernelin and kotlin.math imports added) and validates every shader with naga. */
     fun compile(source: String): Compilation {
         requireGpu()
@@ -66,24 +74,30 @@ object GpuDifferential {
     }
 
     /** Runs one kernel of an already compiled [c] on the CPU and the GPU. */
-    fun run(c: Compilation, kernel: String, size: Int, args: Map<String, Any>): Result {
+    fun run(c: Compilation, kernel: String, size: Int, args: Map<String, Any>): Result = run(c, kernel, Grid(size), args)
+
+    /** Runs one kernel of [c] on the CPU and the GPU, as a 1D, 2D or 3D launch. */
+    fun run(c: Compilation, kernel: String, grid: Grid, args: Map<String, Any>): Result {
         val manifest = KernelManifest.parse(c.manifest(kernel))
 
         // CPU: the very same Kotlin function, called once per id.
         val method = c.loadClass("KernelsKt").methods.single { it.name == kernel }
         val cpuArgs = manifest.params.map { p -> copy(args[p.name] ?: fail("missing argument ${p.name}")) }
-        KernelinCpu.dispatch(size) { method.invoke(null, *cpuArgs.toTypedArray()) }
+        KernelinCpu.dispatch(grid.width, grid.height, grid.depth) { method.invoke(null, *cpuArgs.toTypedArray()) }
         val cpu = manifest.params.withIndex()
             .filter { (_, p) -> p.isWritten }
             .associate { (i, p) -> p.name to cpuArgs[i] }
-        return Result(cpu, runGpu(c, kernel, size, args))
+        return Result(cpu, runGpu(c, kernel, grid, args))
     }
 
     /**
      * Runs one kernel of [c] on the GPU only and returns its written buffers. For behavior where Kotlin throws
      * (so there is no CPU result to compare with), like a for loop with `step 0`.
      */
-    fun runGpu(c: Compilation, kernel: String, size: Int, args: Map<String, Any>): Map<String, Any> {
+    fun runGpu(c: Compilation, kernel: String, size: Int, args: Map<String, Any>): Map<String, Any> = runGpu(c, kernel, Grid(size), args)
+
+    /** Like [runGpu], as a 1D, 2D or 3D launch. */
+    fun runGpu(c: Compilation, kernel: String, grid: Grid, args: Map<String, Any>): Map<String, Any> {
         val manifest = KernelManifest.parse(c.manifest(kernel))
         val dir = Files.createTempDirectory("kernelin-gpu").toFile()
         val wgsl = dir.resolve("kernel.wgsl").apply { writeText(c.wgsl(kernel)) }
@@ -95,7 +109,8 @@ object GpuDifferential {
         }
         val scalars = manifest.scalars.joinToString(", ") { p -> "\"${p.name}\": ${args.getValue(p.name)}" }
         val job = dir.resolve("job.json").apply {
-            writeText("{ \"wgsl\": \"${wgsl.path}\", \"manifest\": \"${manifestFile.path}\", \"size\": $size,\n" +
+            writeText("{ \"wgsl\": \"${wgsl.path}\", \"manifest\": \"${manifestFile.path}\", \"size\": ${grid.size}, " +
+                "\"width\": ${grid.width}, \"height\": ${grid.height},\n" +
                 "\"scalars\": { $scalars },\n\"buffers\": { $buffers } }")
         }
         val (exit, out) = runDeno(deno!!, listOf(job.path))
@@ -121,7 +136,7 @@ object GpuDifferential {
         relTol: Double = 1e-5,
         mismatchFraction: Double = 0.0,
         exactFloats: Boolean = false,
-    ): Result = assertSame(compile(source), kernel, size, args, absTol, relTol, mismatchFraction, exactFloats)
+    ): Result = assertSame(compile(source), kernel, Grid(size), args, absTol, relTol, mismatchFraction, exactFloats)
 
     /** Like [assertSame] for a kernel of an already compiled [c]. */
     fun assertSame(
@@ -133,8 +148,20 @@ object GpuDifferential {
         relTol: Double = 1e-5,
         mismatchFraction: Double = 0.0,
         exactFloats: Boolean = false,
+    ): Result = assertSame(c, kernel, Grid(size), args, absTol, relTol, mismatchFraction, exactFloats)
+
+    /** Like [assertSame], as a 1D, 2D or 3D launch. */
+    fun assertSame(
+        c: Compilation,
+        kernel: String,
+        grid: Grid,
+        args: Map<String, Any>,
+        absTol: Double = 1e-6,
+        relTol: Double = 1e-5,
+        mismatchFraction: Double = 0.0,
+        exactFloats: Boolean = false,
     ): Result {
-        val r = run(c, kernel, size, args)
+        val r = run(c, kernel, grid, args)
         for ((name, cpuValue) in r.cpu) {
             val gpuValue = r.gpu.getValue(name)
             val n = length(cpuValue)

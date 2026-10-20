@@ -50,10 +50,21 @@ public class KernelLaunch private constructor() {
      * On the JVM (and Android) it uses all CPU cores; elsewhere it runs on the calling thread.
      */
     public fun runOnCpu(size: Int) {
+        // Like KernelinCpu.dispatch(size): a negative size runs nothing.
+        runOnCpu(size.coerceAtLeast(0), 1, 1)
+    }
+
+    /** Like [runOnCpu], for a `width x height` grid, like `KernelinCpu.dispatch(width, height) { ... }`. */
+    public fun runOnCpu(width: Int, height: Int) {
+        runOnCpu(width, height, 1)
+    }
+
+    /** Like [runOnCpu], for a `width x height x depth` grid. */
+    public fun runOnCpu(width: Int, height: Int, depth: Int) {
         val call = checkNotNull(cpuCall) {
             "The launch of ${source.name} has no CPU call; it was compiled by an older Kernelin compiler plugin"
         }
-        dispatchOnAllCores(size, call)
+        dispatchOnAllCores(width, height, depth, call)
     }
 
     /** Records how to run the same kernel call on the CPU (the arguments were evaluated once, before). */
@@ -113,8 +124,8 @@ public class KernelLaunch private constructor() {
             try {
                 launch.block()
             } catch (e: IllegalStateException) {
-                // Without the plugin the kernel body runs here, and its globalId() fails outside a dispatch.
-                if (launch.kernelCalls > 0 || e.message?.contains("globalId()") != true) throw e
+                // Without the plugin the kernel body runs here, and its globalId() (or globalIdX() ...) fails outside a dispatch.
+                if (launch.kernelCalls > 0 || e.message?.contains("was called outside a Kernelin dispatch") != true) throw e
                 throw IllegalStateException(NOT_RECORDED, e)
             }
             check(launch.kernelCalls <= 1) { "A launch block must call exactly one @Kernel function, but it called ${launch.kernelCalls}" }

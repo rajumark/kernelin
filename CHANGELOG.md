@@ -14,6 +14,16 @@
   compiler plugin records the call in a new `KernelLaunch` (runtime) that GPU hosts read with
   `KernelLaunch.capture`. A launch block that is not exactly one kernel call is a compile error, shown in the IDE
   too. The map API (`gpu.load(...).run(size, scalars, buffers)`) still works.
+- 2D and 3D thread ids: `globalIdX()`, `globalIdY()` and `globalIdZ()`, with `dispatch(width, height)` and
+  `dispatch(width, height, depth)` launches on `KernelinCpu` (also `dispatchParallel`) and on the GPU (typed
+  `gpu.dispatch(width, height) { ... }`, `Compute.dispatch(width, height) { ... }` and `GpuKernel.run(width, height, ...)`,
+  on Kotlin/Wasm and Android; `KernelLaunch.runOnCpu(width, height)`).
+  Image and grid kernels no longer compute `id % width` and `id / width` by hand. Threads run row by row, so
+  `globalId()` is the row-major index `x + y * width` and CPU and GPU see the same ids. Big grids use the same
+  workgroup spreading as 1D launches (at most 65535 workgroups per dimension). Kernels that use these ids get
+  `kernelin_width` / `kernelin_height` in their uniform; the new `KernelManifest.usesGridIds` and
+  `KernelManifest.scalarOffset` tell custom hosts where the scalars start. 1D kernels and their uniform are
+  unchanged.
 - Built-in random numbers for kernels: `randomInt(seed, index, stream)`, `randomFloat` (in `[0, 1)`),
   `randomIntBelow(bound, seed, index, stream)` and `randomNormal` (Box-Muller). They are counter based and keep no
   state, so pass `globalId()` as the index and a different `stream` for each draw. `randomInt`, `randomFloat` and

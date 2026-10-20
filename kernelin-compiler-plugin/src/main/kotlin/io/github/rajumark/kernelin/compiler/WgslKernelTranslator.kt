@@ -78,6 +78,8 @@ internal class WgslShader(
     val wgsl: String,
     /** Kernel parameters in Kotlin order. */
     val params: List<KernelParam>,
+    /** True when the kernel reads globalIdX/Y/Z, so the uniform also holds the launch width and height. */
+    val usesGridIds: Boolean = false,
 ) {
     val buffers get() = params.filterIsInstance<BufferParam>()
     val scalars get() = params.filterIsInstance<ScalarParam>()
@@ -87,8 +89,10 @@ internal class WgslShader(
         appendLine("  \"kernel\": ${json(fqName)},")
         appendLine("  \"entryPoint\": \"main\",")
         appendLine("  \"workgroupSize\": $WORKGROUP_SIZE,")
+        if (usesGridIds) appendLine("  \"gridIds\": true,")
         appendLine("  \"uniform\": { \"binding\": 0, \"fields\": [")
-        val fields = listOf("{ \"name\": \"kernelin_size\", \"type\": \"u32\" }") +
+        val header = if (usesGridIds) listOf("kernelin_size", "kernelin_width", "kernelin_height") else listOf("kernelin_size")
+        val fields = header.map { "{ \"name\": \"$it\", \"type\": \"u32\" }" } +
             scalars.map { "{ \"name\": ${json(it.name)}, \"type\": ${json(it.type.uniformWgsl)} }" }
         appendLine(fields.joinToString(",\n") { "    $it" })
         appendLine("  ] },")
@@ -166,6 +170,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
     private data class Expr(val code: String, val type: WType, val const: Any? = null)
 
     private var usesSpecialFloats = false
+    private var usesGridIds = false
 
     /**
      * WGSL literal for a value computed with Kotlin's rules. WGSL evaluates all-constant expressions at shader
@@ -251,6 +256,10 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             appendLine()
             appendLine("struct KernelinParams {")
             appendLine("  kernelin_size: u32,")
+            if (usesGridIds) {
+                appendLine("  kernelin_width: u32,")
+                appendLine("  kernelin_height: u32,")
+            }
             for (s in scalars.values) appendLine("  ${s.name}: ${s.type.uniformWgsl},")
             appendLine("}")
             appendLine()
@@ -339,7 +348,7 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             append(body)
             appendLine("}")
         }
-        return TranslationResult(WgslShader(wgsl, params.toList()), emptyList())
+        return TranslationResult(WgslShader(wgsl, params.toList(), usesGridIds), emptyList())
     }
 
     private fun error(element: IrElement, message: String, function: IrSimpleFunction = kernel) {
@@ -1033,6 +1042,11 @@ internal class WgslKernelTranslator(private val kernel: IrSimpleFunction) {
             val resultType = scalarType(call.type)
 
             if (owner == "io.github.rajumark.kernelin" && name == "globalId") return Expr("i32(kernelin_id)", WType.I32)
+            if (owner == "io.github.rajumark.kernelin" && name in GRID_IDS) {
+                // The launch is linear on the GPU too (same order as KernelinCpu), so x/y/z come from the one id.
+                usesGridIds = true
+                return Expr(GRID_IDS.getValue(name), WType.I32)
+            }
             if (owner == "io.github.rajumark.kernelin" && name in RANDOM_FUNCTIONS) return randomCall(call, name, pre)
 
             // Built-in comparison operators.
@@ -1525,6 +1539,13 @@ internal class NameAllocator {
 }
 
 /** Kernelin's random functions (in Random.kt of the runtime) and the WGSL function each one becomes. */
+/** `globalIdX()` ... as WGSL: the row-major split of the linear id by the launch width and height. */
+private val GRID_IDS = mapOf(
+    "globalIdX" to "i32(kernelin_id % kernelin_params.kernelin_width)",
+    "globalIdY" to "i32(kernelin_id / kernelin_params.kernelin_width % kernelin_params.kernelin_height)",
+    "globalIdZ" to "i32(kernelin_id / (kernelin_params.kernelin_width * kernelin_params.kernelin_height))",
+)
+
 private val RANDOM_FUNCTIONS = mapOf(
     "randomInt" to "kernelin_random_int",
     "randomFloat" to "kernelin_random_float",

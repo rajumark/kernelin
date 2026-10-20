@@ -491,6 +491,44 @@ class WgslTranslationTest {
         // Kernels that don't use random numbers don't get the functions.
         assertTrue("kernelin_pcg" !in c.wgsl("plain"))
     }
+
+    @Test
+    fun `2D and 3D thread ids split the one id by the launch width and height`() {
+        val c = compileOk(
+            """
+            fun layer(): Int = globalIdZ()
+
+            @Kernel
+            fun grid(out: IntArray, scale: Float) {
+                val x = globalIdX()
+                val y = globalIdY()
+                out[globalId()] = (x * scale).toInt() + y * 100 + layer() * 10000
+            }
+
+            @Kernel
+            fun line(out: IntArray, scale: Float) {
+                out[globalId()] = (globalId() * scale).toInt()
+            }
+            """,
+        )
+        val wgsl = c.wgsl("grid")
+        assertContains(wgsl, "struct KernelinParams {\n  kernelin_size: u32,\n  kernelin_width: u32,\n  kernelin_height: u32,\n  scale: f32,\n}")
+        assertContains(wgsl, "i32(kernelin_id % kernelin_params.kernelin_width)")
+        assertContains(wgsl, "i32(kernelin_id / kernelin_params.kernelin_width % kernelin_params.kernelin_height)")
+        // A helper can read the ids too.
+        assertContains(wgsl, "return i32(kernelin_id / (kernelin_params.kernelin_width * kernelin_params.kernelin_height));")
+        val manifest = c.manifest("grid")
+        assertContains(manifest, "\"gridIds\": true,")
+        assertContains(manifest, "{ \"name\": \"kernelin_width\", \"type\": \"u32\" }")
+        val parsed = io.github.rajumark.kernelin.KernelManifest.parse(manifest)
+        assertTrue(parsed.usesGridIds)
+        assertEquals(12, parsed.scalarOffset)
+        assertEquals(16, parsed.uniformBytes)
+        // 1D kernels keep the old uniform, so hosts written for 0.3.0 still run them.
+        assertTrue("kernelin_width" !in c.wgsl("line"))
+        assertTrue("gridIds" !in c.manifest("line"))
+        assertEquals(4, io.github.rajumark.kernelin.KernelManifest.parse(c.manifest("line")).scalarOffset)
+    }
 }
 
 /** Validates generated WGSL with naga (from the wgpu project) when it's installed. */

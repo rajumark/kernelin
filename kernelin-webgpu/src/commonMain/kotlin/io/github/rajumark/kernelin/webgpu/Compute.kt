@@ -62,12 +62,31 @@ public class Compute private constructor(
     public suspend fun dispatch(size: Int, kernel: KernelLaunch.() -> Unit) {
         val launch = KernelLaunch.capture(kernel)
         require(size >= 0) { "size must be 0 or more, but was $size" }
+        dispatch(LaunchShape.linear(size), launch)
+    }
+
+    /**
+     * Like [dispatch], for a `width x height` grid of threads: inside the kernel, `globalIdX()` is the column
+     * (`0 until width`), `globalIdY()` the row and `globalId()` the row-major index `x + y * width`.
+     */
+    public suspend fun dispatch(width: Int, height: Int, kernel: KernelLaunch.() -> Unit) {
+        val launch = KernelLaunch.capture(kernel)
+        dispatch(LaunchShape.grid(width, height, 1), launch)
+    }
+
+    /** Like the 2D [dispatch], for a `width x height x depth` grid; `globalIdZ()` is the layer. */
+    public suspend fun dispatch(width: Int, height: Int, depth: Int, kernel: KernelLaunch.() -> Unit) {
+        val launch = KernelLaunch.capture(kernel)
+        dispatch(LaunchShape.grid(width, height, depth), launch)
+    }
+
+    private suspend fun dispatch(shape: LaunchShape, launch: KernelLaunch) {
         val current = gpu
         if (current != null) {
-            val lost = current.launch(size, launch) ?: return
+            val lost = current.launch(shape, launch) ?: return
             fallBack("GPU device lost: $lost")
         }
-        launch.runOnCpu(size)
+        launch.runOnCpu(shape.width, shape.height, shape.depth)
     }
 
     /** Frees the GPU (if any). Later runs use the CPU. */
@@ -87,7 +106,7 @@ internal interface GpuLauncher : AutoCloseable {
     val description: String
 
     /** Runs [launch] and copies results into its arrays; returns null, or the reason when the device was lost. */
-    suspend fun launch(size: Int, launch: KernelLaunch): String?
+    suspend fun launch(shape: LaunchShape, launch: KernelLaunch): String?
 }
 
 /** Opens this platform's GPU host. Throws when there is no usable GPU. */

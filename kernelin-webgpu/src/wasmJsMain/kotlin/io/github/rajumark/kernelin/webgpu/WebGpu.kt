@@ -127,14 +127,30 @@ public class WebGpu private constructor(internal val device: JsAny, public val d
      *
      * The kernel is loaded on the first call and reused after that. Throws like [load] and [GpuKernel.run].
      */
-    public suspend fun dispatch(size: Int, kernel: KernelLaunch.() -> Unit): GpuResult = dispatch(size, KernelLaunch.capture(kernel))
+    public suspend fun dispatch(size: Int, kernel: KernelLaunch.() -> Unit): GpuResult =
+        dispatch(LaunchShape.linear(size), KernelLaunch.capture(kernel))
 
-    internal suspend fun dispatch(size: Int, launch: KernelLaunch): GpuResult {
+    /**
+     * Like [dispatch], for a `width x height` grid of threads: inside the kernel, `globalIdX()` is the column
+     * (`0 until width`), `globalIdY()` the row and `globalId()` the row-major index `x + y * width`.
+     *
+     * ```
+     * gpu.dispatch(width, height) { blur(src = pixels, dst = out, width = width) }
+     * ```
+     */
+    public suspend fun dispatch(width: Int, height: Int, kernel: KernelLaunch.() -> Unit): GpuResult =
+        dispatch(LaunchShape.grid(width, height, 1), KernelLaunch.capture(kernel))
+
+    /** Like the 2D [dispatch], for a `width x height x depth` grid; `globalIdZ()` is the layer. */
+    public suspend fun dispatch(width: Int, height: Int, depth: Int, kernel: KernelLaunch.() -> Unit): GpuResult =
+        dispatch(LaunchShape.grid(width, height, depth), KernelLaunch.capture(kernel))
+
+    internal suspend fun dispatch(shape: LaunchShape, launch: KernelLaunch): GpuResult {
         val loaded = launchedLock.withLock {
             launched[launch.source.name]?.takeUnless { it.isClosed } ?: load(launch.source).also { launched[launch.source.name] = it }
         }
         val arrays = launch.arrays
-        val result = loaded.run(size, launch.scalars, arrays.mapValues { (_, array) -> GpuData.ofArray(array) })
+        val result = loaded.run(shape, launch.scalars, arrays.mapValues { (_, array) -> GpuData.ofArray(array) }, readBack = null)
         for (p in loaded.manifest.buffers) {
             if (!p.isWritten) continue
             when (val array = arrays.getValue(p.name)) {
@@ -307,7 +323,37 @@ public class GpuKernel internal constructor(
         scalars: Map<String, Any> = emptyMap(),
         buffers: Map<String, GpuData>,
         readBack: Set<String>? = null,
+    ): GpuResult = run(LaunchShape.linear(size), scalars, buffers, readBack)
+
+    /**
+     * Like [run], for a `width x height` grid of threads: inside the kernel, `globalIdX()` is the column
+     * (`0 until width`), `globalIdY()` the row and `globalId()` the row-major index `x + y * width`.
+     */
+    public suspend fun run(
+        width: Int,
+        height: Int,
+        scalars: Map<String, Any> = emptyMap(),
+        buffers: Map<String, GpuData>,
+        readBack: Set<String>? = null,
+    ): GpuResult = run(LaunchShape.grid(width, height, 1), scalars, buffers, readBack)
+
+    /** Like the 2D [run], for a `width x height x depth` grid; `globalIdZ()` is the layer. */
+    public suspend fun run(
+        width: Int,
+        height: Int,
+        depth: Int,
+        scalars: Map<String, Any> = emptyMap(),
+        buffers: Map<String, GpuData>,
+        readBack: Set<String>? = null,
+    ): GpuResult = run(LaunchShape.grid(width, height, depth), scalars, buffers, readBack)
+
+    internal suspend fun run(
+        shape: LaunchShape,
+        scalars: Map<String, Any>,
+        buffers: Map<String, GpuData>,
+        readBack: Set<String>?,
     ): GpuResult = mutex.withLock {
+        val size = shape.size
         checkOpen()
         checkRunArguments(
             source,
@@ -315,16 +361,12 @@ public class GpuKernel internal constructor(
             buffers.mapValues { (_, data) -> BufferArgument(data.type, data.gpuBuffer == null || data.gpuBuffer.gpu === gpu) },
             readBack,
         )
-        val view = newDataView(manifest.uniformBytes)
-        setUint32(view, 0, size)
-        manifest.scalars.forEachIndexed { i, p ->
-            val v = scalars.getValue(p.name)
-            val offset = 4 + i * 4
-            when (p.type) {
-                "f32" -> setFloat32(view, offset, (v as Number).toDouble())
-                "bool" -> setUint32(view, offset, if (v as Boolean) 1 else 0)
-                else -> setInt32(view, offset, (v as Number).toInt())
-            }
+        val bytes = uniformBytes(source, shape, scalars)
+        val view = newDataView(bytes.size)
+        for (offset in bytes.indices step 4) {
+            var bits = 0
+            for (i in 0 until 4) bits = bits or ((bytes[offset + i].toInt() and 0xff) shl (8 * i))
+            setInt32(view, offset, bits)
         }
         // Buffers from earlier runs are read now, before this run replaces or reallocates them.
         val sources = manifest.buffers.mapNotNull { p -> buffers.getValue(p.name).gpuBuffer?.let { p.name to it.jsBuffer() } }.toMap()
@@ -574,11 +616,8 @@ private fun newDataView(bytes: Int): JsAny = js("new DataView(new ArrayBuffer(by
 
 private fun dataViewBuffer(view: JsAny): JsAny = js("view.buffer")
 
-private fun setUint32(view: JsAny, offset: Int, value: Int): Unit = js("{ view.setUint32(offset, value >>> 0, true); }")
-
 private fun setInt32(view: JsAny, offset: Int, value: Int): Unit = js("{ view.setInt32(offset, value, true); }")
 
-private fun setFloat32(view: JsAny, offset: Int, value: Double): Unit = js("{ view.setFloat32(offset, value, true); }")
 
 private fun now(): Double = js("performance.now()")
 
@@ -601,8 +640,8 @@ internal actual suspend fun openGpu(): GpuLauncher {
     return object : GpuLauncher {
         override val description: String get() = gpu.description
 
-        override suspend fun launch(size: Int, launch: KernelLaunch): String? = try {
-            gpu.dispatch(size, launch)
+        override suspend fun launch(shape: LaunchShape, launch: KernelLaunch): String? = try {
+            gpu.dispatch(shape, launch)
             null
         } catch (e: GpuException) {
             gpu.lostReason ?: throw e

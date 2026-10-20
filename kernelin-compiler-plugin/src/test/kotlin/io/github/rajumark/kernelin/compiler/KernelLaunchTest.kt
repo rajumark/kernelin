@@ -29,6 +29,11 @@ class KernelLaunchTest {
             if (on) out[i] = (counts[i] * times).toFloat()
         }
 
+        @Kernel
+        fun cells(out: IntArray) {
+            out[globalId()] = globalIdX() + globalIdY() * 10 + globalIdZ() * 100
+        }
+
         // Stands in for a GPU host such as WebGpu.dispatch.
         fun launch(block: KernelLaunch.() -> Unit): KernelLaunch = KernelLaunch.capture(block)
     """.trimIndent()
@@ -103,11 +108,17 @@ class KernelLaunchTest {
                 val outs = FloatArray(3)
                 val counts = intArrayOf(1, 2, 3)
                 launch { mixed(on = true, counts = counts, times = 5, out = outs) }.runOnCpu(3)
-                return listOf(ys.toList(), outs.toList(), evaluations)
+                val cells = IntArray(12)
+                launch { cells(out = cells) }.runOnCpu(4, 3)
+                val cells3D = IntArray(12)
+                launch { cells(out = cells3D) }.runOnCpu(2, 3, 2)
+                return listOf(ys.toList(), outs.toList(), evaluations, cells.toList(), cells3D.toList())
             }
             """,
         )
-        val (ys, outs, evaluations) = c.call("run") as List<*>
+        val (ys, outs, evaluations, cells, cells3D) = c.call("run") as List<*>
+        assertEquals(List(12) { it % 4 + it / 4 * 10 }, cells, "2D: x + 10 * y")
+        assertEquals(List(12) { it % 2 + it / 2 % 3 * 10 + it / 6 * 100 }, cells3D, "3D: x + 10 * y + 100 * z")
         assertEquals(listOf(4f, 7f, 10f), ys)
         assertEquals(listOf(5f, 10f, 15f), outs)
         assertEquals(1, evaluations, "Arguments are evaluated once, not once per thread")

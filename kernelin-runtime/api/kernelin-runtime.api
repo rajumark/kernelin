@@ -3,6 +3,9 @@ public abstract interface annotation class io/github/rajumark/kernelin/Kernel : 
 
 public final class io/github/rajumark/kernelin/KernelKt {
 	public static final fun globalId ()I
+	public static final fun globalIdX ()I
+	public static final fun globalIdY ()I
+	public static final fun globalIdZ ()I
 }
 
 public final class io/github/rajumark/kernelin/KernelLaunch {
@@ -18,6 +21,8 @@ public final class io/github/rajumark/kernelin/KernelLaunch {
 	public final fun getSource ()Lio/github/rajumark/kernelin/KernelSource;
 	public final fun kernel (Lio/github/rajumark/kernelin/KernelSource;)V
 	public final fun runOnCpu (I)V
+	public final fun runOnCpu (II)V
+	public final fun runOnCpu (III)V
 }
 
 public final class io/github/rajumark/kernelin/KernelLaunch$Companion {
@@ -26,13 +31,17 @@ public final class io/github/rajumark/kernelin/KernelLaunch$Companion {
 
 public final class io/github/rajumark/kernelin/KernelManifest {
 	public static final field Companion Lio/github/rajumark/kernelin/KernelManifest$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/List;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILjava/util/List;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getBuffers ()Ljava/util/List;
 	public final fun getEntryPoint ()Ljava/lang/String;
 	public final fun getKernel ()Ljava/lang/String;
 	public final fun getParams ()Ljava/util/List;
+	public final fun getScalarOffset ()I
 	public final fun getScalars ()Ljava/util/List;
 	public final fun getUniformBytes ()I
+	public final fun getUsesGridIds ()Z
 	public final fun getWorkgroupSize ()I
 }
 
@@ -67,7 +76,11 @@ public final class io/github/rajumark/kernelin/KernelSourceKt {
 
 public final class io/github/rajumark/kernelin/KernelinCpu {
 	public static final field INSTANCE Lio/github/rajumark/kernelin/KernelinCpu;
+	public final fun dispatch (IIILkotlin/jvm/functions/Function0;)V
+	public final fun dispatch (IILkotlin/jvm/functions/Function0;)V
 	public final fun dispatch (ILkotlin/jvm/functions/Function0;)V
+	public final fun dispatchParallel (IIILkotlin/jvm/functions/Function0;)V
+	public final fun dispatchParallel (IILkotlin/jvm/functions/Function0;)V
 	public final fun dispatchParallel (ILkotlin/jvm/functions/Function0;)V
 }
 

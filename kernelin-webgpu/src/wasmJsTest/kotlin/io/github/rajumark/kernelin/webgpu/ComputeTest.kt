@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -64,6 +65,27 @@ class ComputeTest {
         assertContains(compute.cpuReason!!, "GPU device lost")
         assertContains(compute.cpuReason!!, "GPU process crashed")
         assertContentEquals(onCpu, compute.run())
+    }
+
+    @Test
+    fun gridLaunchesRunOnTheGpuOrTheCpuWithTheSameIds() = runTest {
+        fakeOnDispatchFill(": cells", 42)
+        val gpu = Compute.create()
+        val onGpuCells = IntArray(12)
+        gpu.dispatch(4, 3) { gridCells(cells = onGpuCells, factor = 2f) }
+        assertContentEquals(IntArray(12) { 42 }, onGpuCells)
+        // size, width, height, then factor.
+        assertContentEquals(intArrayOf(12, 4, 3), fakeUniform(": scalars").copyOf(3))
+
+        val cpu = Compute.create(useGpu = false)
+        val cells2D = IntArray(12)
+        cpu.dispatch(4, 3) { gridCells(cells = cells2D, factor = 2f) }
+        assertContentEquals(IntArray(12) { it % 4 * 2 + it / 4 * 100 }, cells2D)
+        val cells3D = IntArray(12)
+        cpu.dispatch(2, 3, 2) { gridCells(cells = cells3D, factor = 1f) }
+        assertContentEquals(IntArray(12) { it % 2 + it / 2 % 3 * 100 + it / 6 * 10000 }, cells3D)
+        assertFailsWith<IllegalArgumentException> { cpu.dispatch(2, -3) { gridCells(cells = cells2D, factor = 1f) } }
+        assertFailsWith<IllegalArgumentException> { gpu.dispatch(2, 2, -1) { gridCells(cells = cells2D, factor = 1f) } }
     }
 
     @Test

@@ -3,6 +3,9 @@ package io.github.rajumark.kernelin.webgpu
 import io.github.rajumark.kernelin.Kernel
 import io.github.rajumark.kernelin.KernelinCpu
 import io.github.rajumark.kernelin.globalId
+import io.github.rajumark.kernelin.globalIdX
+import io.github.rajumark.kernelin.globalIdY
+import io.github.rajumark.kernelin.globalIdZ
 import io.github.rajumark.kernelin.kernelSource
 import kotlinx.coroutines.async
 import org.junit.Assume.assumeTrue
@@ -40,6 +43,11 @@ fun mandelbrot(out: IntArray, width: Int, height: Int, maxIter: Int) {
         n++
     }
     out[i] = n
+}
+
+@Kernel
+fun gridCells(cells: IntArray, offset: Int) {
+    cells[globalId()] = globalIdX() + globalIdY() * 1000 + globalIdZ() * 1000000 + offset
 }
 
 @Kernel
@@ -111,6 +119,19 @@ class AndroidGpuTest {
         KernelinCpu.dispatch(n) { saxpy(2.5f, x, expected) }
         assertContentEquals(expected, result.floats("y"))
         assertTrue(result.millis >= 0.0)
+    }
+
+    @Test
+    fun gridLaunchesMatchCpu(): Unit = runBlocking {
+        val (w, h, d) = Triple(37, 23, 3)
+        val cpu = IntArray(w * h * d)
+        KernelinCpu.dispatch(w, h, d) { gridCells(cpu, 7) }
+        val cells = IntArray(w * h * d)
+        gpu.dispatch(w, h, d) { gridCells(cells = cells, offset = 7) }
+        assertContentEquals(cpu, cells)
+        val kernel = gpu.load(kernelSource(::gridCells))
+        val flat = kernel.run(w, h, mapOf("offset" to 0), mapOf("cells" to GpuData.empty(w * h))).ints("cells")
+        assertContentEquals(IntArray(w * h) { it % w + it / w * 1000 }, flat)
     }
 
     @Test
