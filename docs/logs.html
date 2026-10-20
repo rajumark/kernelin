@@ -292,10 +292,33 @@
   </div>
   <ul>
     <li><b>Same GPU speed as Chrome:</b> the kernel times match the Chrome run within 1–2%, as expected (both use Dawn on Vulkan).</li>
-    <li><b>Copying is not faster yet:</b> end-to-end, the native host is slower than Chrome for 4 of 5 kernels. Each run copies the data more than once (<code>GpuData.of</code> into a direct buffer, the read-back buffer, then the Kotlin array). Cutting those copies is follow-up work.</li>
+    <li><b>Copying is not faster yet:</b> end-to-end, the native host is slower than Chrome for 4 of 5 kernels. Each run copies the data more than once (<code>GpuData.of</code> into a direct buffer, the read-back buffer, then the Kotlin array). Cutting those copies is follow-up work (done the same day: see the next table).</li>
     <li><b>Heavy math still wins big:</b> waves is 36× faster than all 8 cores on the GPU (kernel only), 12× end-to-end.</li>
     <li><b>Phone memory:</b> the benchmark first ran out of the 512 MB app heap with 64 MB arrays. Fixed in the benchmark (fewer copies, each case in its own process). Two new device tests check that runs and closed kernels don't keep memory alive (16 MB kept over 20 runs: just the last one).</li>
     <li>Reproduce: <code>scripts/bench-android-app.sh benchmarks/&lt;date&gt;-&lt;phone&gt;-native.json</code>. Raw data: <code>benchmarks/2026-10-20-moto-g57-power-native.json</code></li>
+  </ul>
+
+  <h3>📱 Android phone, native app, fewer copies (Oct 20, later)</h3>
+  <p>The same phone and app after the Android host stopped copying the data more than once. First we measured where the time went in one vectorAdd run (64 MB per array): Dawn's <code>writeBuffer</code> took about 100–140 ms per input array, because it stages every big upload through a new buffer; the read-back copy into a direct buffer took 42–60 ms; then <code>floats()</code> took about 70 ms (a new array plus a second copy). Now uploads go through two small reused buffers that the CPU writes into directly (about 25 ms for 64 MB), and results stay in GPU read-back memory until <code>floats()</code> / <code>ints()</code> copy them once, straight into the Kotlin array. The API is the same. All 20 Android GPU tests passed on the phone, none skipped.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr>
+      <th>Kernel</th><th class="num">GPU kernel</th><th class="num">End-to-end before</th><th class="num">End-to-end now</th><th class="num">Chrome end-to-end (Oct 16)</th><th class="num">Correct</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><b>vectorAdd</b></td><td class="num">15.5 ms</td><td class="num">385 ms</td><td class="num"><b>148 ms</b></td><td class="num">342 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>saxpy</b></td><td class="num">15.4 ms</td><td class="num">324 ms</td><td class="num"><b>129 ms</b></td><td class="num">255 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>blur</b></td><td class="num">29.0 ms</td><td class="num">279 ms</td><td class="num"><b>155 ms</b></td><td class="num">298 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>waves</b></td><td class="num">61.1 ms</td><td class="num">192 ms</td><td class="num"><b>97 ms</b></td><td class="num">126 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>mandelbrot</b></td><td class="num">47.5 ms</td><td class="num">97 ms</td><td class="num"><b>73 ms</b></td><td class="num">94 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <ul>
+    <li><b>Faster than Chrome now:</b> end-to-end, the native host beats Chrome on the same phone for all 5 kernels (before: 1 of 5). The GPU kernel times did not change.</li>
+    <li><b>Still not free:</b> for light kernels most of the time is still copying. vectorAdd spends about 15 ms on the GPU and the rest moving 192 MB in and out. The CPU on all 8 cores (about 90 ms) still beats the GPU end-to-end for vectorAdd and saxpy, so keep data on the GPU between runs when you can.</li>
+    <li><b>Not in these numbers:</b> the benchmark makes its <code>GpuData.of</code> copies before the timer starts, as before. Typed <code>gpu.dispatch { }</code> now skips that copy too: it uploads straight from your arrays.</li>
+    <li>Raw data: <code>benchmarks/2026-10-20-moto-g57-power-native-fewer-copies.json</code> (before: <code>benchmarks/2026-10-20-moto-g57-power-native.json</code>)</li>
   </ul>
 
   <!-- ============================================================ HOW IT WORKS -->
@@ -544,6 +567,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
     <div class="row"><span>Oct 16</span><span><b>IDE errors while you type.</b> K2 frontend (FIR) checkers for <code>@Kernel</code> functions: signature, parameter and variable types, Double/Long/String values, lambdas (except <code>repeat</code>), library calls, object creation, exceptions, casts, nullable values. Same messages as the build. They only report what the translator rejects anyway: the first run caught one false positive (<code>x in 10 downTo 0</code>), fixed, and then 2,000 fuzzed kernels passed. 7 new tests; 47 tests in total (36 compiler, 6 runtime, 5 samples).</span></div>
     <div class="row"><span>Oct 16</span><span><b>v0.2.0 released on Maven Central</b> with everything above: more Kotlin in kernels, Kotlin-exact GPU math, the fuzzer and IDE checks.</span></div>
     <div class="row"><span>Oct 20</span><span><b>Native Android GPU host tested on a real phone</b> (plan item 6 done). moto g57 power, Adreno 710 on Vulkan through AndroidX WebGPU: 16/16 device tests passed, none skipped; in-app benchmark 5/5 kernels 100% correct, GPU kernel times equal to Chrome's. End-to-end copies are slower than Chrome for 4 of 5 kernels (extra copies, follow-up). The benchmark app now runs every case in its own process and copies less, so 64 MB arrays fit in the phone's app heap.</span></div>
+    <div class="row"><span>Oct 20</span><span><b>Android GPU runs copy less.</b> Measured first: Dawn's <code>writeBuffer</code> was the biggest cost (100–140 ms per 64 MB input), then two read-back copies. Uploads now go through two reused buffers the CPU writes into directly, and results are copied once, straight from GPU memory into the Kotlin array. End-to-end on the moto g57 power: vectorAdd 385 → 148 ms, saxpy 324 → 129 ms, blur 279 → 155 ms, waves 192 → 97 ms, mandelbrot 97 → 73 ms, now faster than Chrome for all 5 kernels (5/5 still 100% correct). Same API. 20/20 device tests passed on the phone, none skipped (2 new ones: uploads in several chunks, and results that keep their data after later runs and after <code>close()</code>).</span></div>
   </div>
 
   </div><!-- /tab-report -->
@@ -567,7 +591,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
 <h3>Phase 1: Make it real <span class="tag blue">7 / 14</span></h3>
 <ul class="check">
   <li class="done"><span class="box">✓</span><span class="t"><b>5.</b> Release 0.3.0 with everything from Phase 0 (on Maven Central 2026-10-19, tag v0.3.0, commit 5989bd8; checked from Central on JVM, JS, Native and Wasm)</span></li>
-  <li class="done"><span class="box">✓</span><span class="t"><b>6.</b> Native Android GPU runner (AndroidX WebGPU), plus an Android benchmark inside an app, not Chrome (commits a880168, 528d119; tested on the moto g57 power: 18/18 device tests, 5/5 benchmark kernels match; end-to-end copies still slower than Chrome)</span></li>
+  <li class="done"><span class="box">✓</span><span class="t"><b>6.</b> Native Android GPU runner (AndroidX WebGPU), plus an Android benchmark inside an app, not Chrome (commits a880168, 528d119; tested on the moto g57 power: 18/18 device tests, 5/5 benchmark kernels match; then fewer copies per run: end-to-end faster than Chrome for all 5 kernels)</span></li>
   <li class="done"><span class="box">✓</span><span class="t"><b>7.</b> Automatic CPU fallback: one call that runs on the GPU when there is one and on <code>KernelinCpu</code> when not, so users don't write two code paths (commit 9e13504; <code>Compute</code>, tested on the Wasm fake GPU and the Android emulator's CPU fallback)</span></li>
   <li class="done"><span class="box">✓</span><span class="t"><b>8.</b> Typed launchers generated by the compiler plugin: <code>saxpy.gpu(gpu, alpha = 2f, x = ..., y = ...)</code>, checked at compile time (commit f3fdbae)</span></li>
   <li class="done"><span class="box">✓</span><span class="t"><b>9.</b> 2D/3D thread ids (commit 39dda66)</span></li>

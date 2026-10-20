@@ -149,6 +149,43 @@ class AndroidGpuTest {
         assertContentEquals(cpuY, y)
     }
 
+    /** 40 MB per array: uploads go through the reused upload buffers in several chunks. */
+    @Test
+    fun bigArraysUploadInChunks(): Unit = runBlocking {
+        val n = 10 shl 20
+        val x = FloatArray(n) { (it % 1000) * 0.25f }
+        val y = FloatArray(n) { (it % 77).toFloat() }
+        val expected = y.copyOf()
+        KernelinCpu.dispatch(n) { saxpy(3f, x, expected) }
+        val kernel = gpu.load(kernelSource(::saxpy))
+        assertContentEquals(expected, kernel.run(n, mapOf("alpha" to 3f), mapOf("x" to GpuData.of(x), "y" to GpuData.of(y))).floats("y"))
+        kernel.close()
+        gpu.dispatch(n) { saxpy(alpha = 3f, x = x, y = y) }
+        assertContentEquals(expected, y)
+    }
+
+    /** Results are read in place from GPU memory; they must keep their data when the kernel runs again or closes. */
+    @Test
+    fun resultsKeepTheirDataAfterLaterRunsAndClose(): Unit = runBlocking {
+        val n = 1000
+        val kernel = gpu.load(kernelSource(::saxpy))
+        val x = GpuData.of(FloatArray(n) { 1f })
+        val results = (1..5).map { k -> kernel.run(n, mapOf("alpha" to k.toFloat()), mapOf("x" to x, "y" to GpuData.empty(n))) }
+        // bytes() copies its data out, so the next run takes that result's GPU buffer back.
+        val copied = results.last().bytes("y")
+        kernel.run(n, mapOf("alpha" to 9f), mapOf("x" to x, "y" to GpuData.empty(n)))
+        results.forEachIndexed { i, r -> assertTrue(r.floats("y").all { it == i + 1f }, "run ${i + 1}") }
+        assertEquals(5f, copied.asFloatBuffer().get(n - 1))
+        kernel.close()
+        results.forEachIndexed { i, r -> assertTrue(r.floats("y").all { it == i + 1f }, "run ${i + 1} after close") }
+        assertEquals(java.lang.Float.floatToRawIntBits(5f), results.last().ints("y")[0])
+
+        val other = gpu.load(kernelSource(::saxpy))
+        val last = other.run(n, mapOf("alpha" to 7f), mapOf("x" to x, "y" to GpuData.empty(n)))
+        gpu.close()
+        assertTrue(last.floats("y").all { it == 7f })
+    }
+
     @Test
     fun integerKernelMatchesCpuBitForBit(): Unit = runBlocking {
         val n = 4096

@@ -43,6 +43,15 @@
   device tests pass and the 5 benchmark kernels match the CPU; GPU kernel times equal Chrome's on the same phone.
   The script runs every benchmark case in its own app process, so 64 MB arrays fit in a phone's app heap. New
   device tests check that runs and closed kernels don't keep their callers' memory alive.
+- Faster Android GPU runs: fewer copies of the data per run. Uploads now go through two small reused buffers that
+  the CPU writes into directly, instead of Dawn's `writeBuffer`, which staged every big upload through a new buffer
+  (~140 ms for 64 MB on the moto g57 power, now ~25 ms). Results stay in GPU read-back memory, and `floats()` /
+  `ints()` copy them once, straight into the Kotlin array (before: a copy into a direct buffer first). Typed
+  `gpu.dispatch { }` uploads straight from your arrays and writes results straight back into them, with no extra
+  snapshot copy. End-to-end on the moto g57 power (64 MB arrays): vectorAdd 385 → 148 ms, saxpy 324 → 129 ms, blur
+  279 → 155 ms, waves 192 → 97 ms, mandelbrot 97 → 73 ms, now faster than Chrome on the same phone for all 5 kernels.
+  The API is unchanged: `GpuData.of` still copies the array when you call it, and results keep their data after
+  later runs and after `close()`. `GpuResult.bytes(name)` copies the output out of GPU memory on its first call.
 
 ## 0.3.0 (2026-10-19)
 

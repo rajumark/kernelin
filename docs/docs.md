@@ -480,15 +480,19 @@ val y2 = result.floats("y")
 
 - `load` and `run` are `suspend` and can be called from any coroutine, including the main thread: every GPU call
   runs on one background thread that the `WebGpu` owns. `close()` stops it.
-- `GpuResult.bytes(name)` is a little-endian `java.nio.ByteBuffer` (no copy); `floats` / `ints` copy into arrays.
+- `floats` / `ints` copy an output once, straight from GPU read-back memory into a Kotlin array.
+  `GpuResult.bytes(name)` is a little-endian `java.nio.ByteBuffer`, copied out of GPU memory on its first call.
+- Typed `gpu.dispatch { }` uploads straight from your arrays and writes the results straight back into them, so it
+  copies less than `GpuData.of` + `run` (`GpuData.of` copies the array when you call it, so you can change the array
+  afterwards).
 - Fall back to `KernelinCpu` when `WebGpu.create()` throws `GpuException`. **Emulators** offer no real GPU to
   WebGPU (only Dawn's "Null" adapter, which runs nothing), so `create()` throws there; test GPU code on a phone.
 - Needs `minSdk` 26. The library adds Dawn's native code for `arm64-v8a`, `armeabi-v7a`, `x86` and `x86_64`
   (several MB per ABI), so use App Bundles or ABI splits.
 - Benchmark on your phone: `scripts/bench-android-app.sh` builds and runs the `samples-android` app, which times
   the sample kernels on the phone's GPU and CPU and checks that the results match. On a moto g57 power (Adreno 710)
-  the GPU kernel times equal Chrome's on the same phone; end-to-end runs (copying data in and out) are still slower
-  than Chrome for light kernels, because the Android host copies the data more than once.
+  the GPU kernel times equal Chrome's on the same phone, and end-to-end runs (copying data in and out) are faster
+  than Chrome for all 5 kernels (for example vectorAdd on 64 MB arrays: 148 ms native, 342 ms in Chrome).
 
 ### On the desktop JVM **(main)**
 
@@ -1129,7 +1133,7 @@ Test every kernel on the CPU with KernelinCpu.dispatch(size) { kernel(...) }.
 
 - Workgroup shared memory and atomics (for matrix multiply, reductions and histograms); 2D/3D ids are done on main
 - Vector types
-- Android: done on main, natively through AndroidX WebGPU and tested on a real phone GPU; next, fewer copies per run
+- Android: done on main, natively through AndroidX WebGPU and tested on a real phone GPU, with end-to-end runs faster than Chrome
 - Done in 0.2.0: IDE errors while you type (FIR checkers), `Boolean` parameters, arrays in helpers, `repeat`, labeled `break`/`continue`, `in` ranges, `isNaN`, Kotlin-exact constant math and shifts; GPU-vs-CPU differential tests, a fuzzer, ABI checks and coverage gates
 
 **Later (2.0 and beyond)**

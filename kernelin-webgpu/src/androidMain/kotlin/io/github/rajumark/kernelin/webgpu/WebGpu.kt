@@ -35,11 +35,13 @@ import androidx.webgpu.GPUShaderSourceWGSL
 import androidx.webgpu.MapMode
 import androidx.webgpu.PowerPreference
 import androidx.webgpu.ShaderStage
+import androidx.webgpu.WebGpuException
 import io.github.rajumark.kernelin.KernelLaunch
 import io.github.rajumark.kernelin.KernelManifest
 import io.github.rajumark.kernelin.KernelSource
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -255,13 +257,10 @@ public class WebGpu private constructor(
             launched[launch.source.name]?.takeUnless { it.isClosed } ?: load(launch.source).also { launched[launch.source.name] = it }
         }
         val arrays = launch.arrays
-        val result = loaded.run(shape, launch.scalars, arrays.mapValues { (_, array) -> GpuData.ofArray(array) }, readBack = null)
+        // The arrays are read during this call, so they are uploaded as they are, without a snapshot copy first.
+        val result = loaded.run(shape, launch.scalars, arrays.mapValues { (_, array) -> GpuData.borrow(array) }, readBack = null)
         for (p in loaded.manifest.buffers) {
-            if (!p.isWritten) continue
-            when (val array = arrays.getValue(p.name)) {
-                is IntArray -> result.bytes(p.name).asIntBuffer().get(array)
-                is FloatArray -> result.bytes(p.name).asFloatBuffer().get(array)
-            }
+            if (p.isWritten) result.readBack(p.name).readInto(arrays.getValue(p.name))
         }
         return result
     }
@@ -273,6 +272,7 @@ public class WebGpu private constructor(
         state.closing = true
         val cleanup = Runnable {
             kernels.toList().forEach { it.closeOnGpuThread() }
+            uploads.forEach { it?.destroy() }
             device.destroy()
             adapter.close()
             instance.close()
@@ -280,6 +280,55 @@ public class WebGpu private constructor(
         // Dawn objects belong to the GPU thread: clean up there, then stop it.
         if (Thread.currentThread() === gpuThread) cleanup.run() else thread.executor.execute(cleanup)
         thread.close()
+    }
+
+    /**
+     * Upload buffers that the CPU writes into directly (mapped), reused by every run: two, so the CPU fills one while
+     * the GPU copies the other. Dawn's `writeBuffer` stages big uploads through a new buffer every time, which on a
+     * phone (moto g57 power) takes ~140 ms for 64 MB; this takes ~25 ms.
+     */
+    private val uploads = arrayOfNulls<GPUBuffer>(2)
+    private val uploadMapped = BooleanArray(2)
+    private var nextUpload = 0
+    /** Runs of different kernels can interleave on the GPU thread while one waits for a map, so uploads take turns. */
+    private val uploadLock = Mutex()
+
+    /** Copies [data] (CPU contents) into [target], in chunks of at most [UPLOAD_CHUNK] bytes. On the GPU thread. */
+    internal suspend fun upload(target: GPUBuffer, data: GpuData, label: String): Unit = uploadLock.withLock {
+        val total = data.length * 4L
+        var offset = 0L
+        try {
+            while (offset < total) {
+                val bytes = minOf(UPLOAD_CHUNK, total - offset)
+                val i = nextUpload
+                nextUpload = (i + 1) % uploads.size
+                var staging = uploads[i]
+                if (staging == null || staging.size < bytes) {
+                    // Destroyed only once the GPU is done copying from it.
+                    staging?.destroy()
+                    staging = device.createBuffer(GPUBufferDescriptor(USAGE_UPLOAD, bytes, "Kernelin: upload", mappedAtCreation = true))
+                    uploads[i] = staging
+                    uploadMapped[i] = true
+                } else if (!uploadMapped[i]) {
+                    // Waits until the GPU has copied this buffer's previous chunk.
+                    pump { staging.mapAndAwait(MapMode.Write, 0, staging.size) }
+                    uploadMapped[i] = true
+                }
+                data.writeTo(staging.getMappedRange(0, bytes).order(ByteOrder.LITTLE_ENDIAN), offset.toInt(), bytes.toInt())
+                staging.unmap()
+                uploadMapped[i] = false
+                val encoder = device.createCommandEncoder(GPUCommandEncoderDescriptor(label = "$label (upload)"))
+                encoder.copyBufferToBuffer(staging, 0, target, offset, bytes)
+                val commands = encoder.finish()
+                device.queue.submit(arrayOf(commands))
+                commands.close()
+                encoder.close()
+                offset += bytes
+            }
+        } catch (e: WebGpuException) {
+            lostReason?.let { throw GpuException("The GPU device was lost while uploading $label ($it)", e) }
+            throw GpuException("Uploading $label failed: ${e.message}", e)
+        }
     }
 
     internal fun forget(kernel: GpuKernel) {
@@ -407,7 +456,21 @@ public class GpuData private constructor(
     internal val length: Int,
     internal val type: String?,
     internal val gpuBuffer: GpuBuffer? = null,
+    /** An IntArray or FloatArray read when the run uploads it, not copied before (see [borrow]). */
+    private val array: Any? = null,
 ) {
+    /** True when this data comes from the CPU and must be uploaded. */
+    internal val hasContents: Boolean get() = bytes != null || array != null
+
+    /** Writes [byteCount] bytes of the contents, from byte [from] on, into [into] (a mapped upload buffer). */
+    internal fun writeTo(into: ByteBuffer, from: Int, byteCount: Int) {
+        when {
+            bytes != null -> into.put(bytes.duplicate().also { it.position(from); it.limit(from + byteCount) })
+            array is FloatArray -> into.asFloatBuffer().put(array, from / 4, byteCount / 4)
+            array is IntArray -> into.asIntBuffer().put(array, from / 4, byteCount / 4)
+        }
+    }
+
     /** Ways to create buffer data. */
     public companion object {
         /** A zero-filled buffer of [length] elements, not uploaded (for outputs). */
@@ -427,10 +490,13 @@ public class GpuData private constructor(
          */
         public fun of(buffer: GpuBuffer): GpuData = GpuData(null, buffer.length, buffer.type, buffer)
 
-        /** An IntArray or FloatArray argument of a [KernelLaunch]. */
-        internal fun ofArray(array: Any): GpuData = when (array) {
-            is IntArray -> of(array)
-            is FloatArray -> of(array)
+        /**
+         * An IntArray or FloatArray argument of a [KernelLaunch], uploaded straight from the array without a snapshot
+         * copy: [WebGpu.dispatch] reads it during the call, so it can't change in between.
+         */
+        internal fun borrow(array: Any): GpuData = when (array) {
+            is IntArray -> GpuData(null, array.size, "i32", array = array)
+            is FloatArray -> GpuData(null, array.size, "f32", array = array)
             else -> throw IllegalArgumentException("Kernel arrays must be IntArray or FloatArray, not ${array::class.simpleName}")
         }
 
@@ -472,28 +538,66 @@ public class GpuBuffer internal constructor(
 public class GpuResult internal constructor(
     /** Milliseconds from upload until results were back in memory. */
     public val millis: Double,
-    private val outputs: Map<String, ByteBuffer>,
+    private val outputs: Map<String, ReadBack>,
     private val buffers: Map<String, GpuBuffer>,
 ) {
-    /** The raw little-endian bytes of an output; no copy. */
-    public fun bytes(name: String): ByteBuffer = (
-        outputs[name] ?: throw IllegalArgumentException(
-            if (name in buffers) {
-                "Buffer '$name' was not read back (see readBack in GpuKernel.run); use buffer(\"$name\") to keep it on the GPU"
-            } else {
-                "No output buffer named '$name'"
-            },
-        )
-        ).duplicate().order(ByteOrder.LITTLE_ENDIAN)
+    /** The raw little-endian bytes of an output. The first call copies them out of GPU memory; later calls don't copy. */
+    public fun bytes(name: String): ByteBuffer = readBack(name).bytes().duplicate().order(ByteOrder.LITTLE_ENDIAN)
 
     /** Copies an `i32` output into a Kotlin [IntArray]. */
-    public fun ints(name: String): IntArray = bytes(name).asIntBuffer().let { b -> IntArray(b.remaining()).also { b.get(it) } }
+    public fun ints(name: String): IntArray = readBack(name).read { b -> b.asIntBuffer().let { IntArray(it.remaining()).also(it::get) } }
 
     /** Copies an `f32` output into a Kotlin [FloatArray]. */
-    public fun floats(name: String): FloatArray = bytes(name).asFloatBuffer().let { b -> FloatArray(b.remaining()).also { b.get(it) } }
+    public fun floats(name: String): FloatArray = readBack(name).read { b -> b.asFloatBuffer().let { FloatArray(it.remaining()).also(it::get) } }
+
+    internal fun readBack(name: String): ReadBack = outputs[name] ?: throw IllegalArgumentException(
+        if (name in buffers) {
+            "Buffer '$name' was not read back (see readBack in GpuKernel.run); use buffer(\"$name\") to keep it on the GPU"
+        } else {
+            "No output buffer named '$name'"
+        },
+    )
 
     /** The kernel's GPU buffer [name] after this run, to pass to another run with [GpuData.of] without a CPU copy. */
     public fun buffer(name: String): GpuBuffer = buffers[name] ?: throw IllegalArgumentException("No buffer parameter named '$name'")
+}
+
+/**
+ * One read-back output. It stays in the GPU's read-back buffer, mapped into memory, so [GpuResult.floats] and
+ * [GpuResult.ints] copy it only once, straight into the Kotlin array. Before that buffer is reused or freed, the
+ * kernel calls [keep], which copies the data to memory of its own if the result may still be read.
+ */
+internal class ReadBack(private var mapped: ByteBuffer?) {
+    private var copy: ByteBuffer? = null
+
+    /** Calls [block] with the data (little-endian, position 0), while [keep] can't run. */
+    @Synchronized
+    fun <T> read(block: (ByteBuffer) -> T): T = block(checkNotNull(copy ?: mapped).duplicate().order(ByteOrder.LITTLE_ENDIAN))
+
+    /** Copies the data into [array], an IntArray or FloatArray of the same size. */
+    fun readInto(array: Any): Unit = read { b ->
+        when (array) {
+            is IntArray -> b.asIntBuffer().get(array)
+            is FloatArray -> b.asFloatBuffer().get(array)
+        }
+    }
+
+    /** The data in memory of its own, copied out of the read-back buffer on the first call. */
+    @Synchronized
+    fun bytes(): ByteBuffer = copy ?: checkNotNull(mapped).let { m ->
+        ByteBuffer.allocateDirect(m.capacity()).order(ByteOrder.LITTLE_ENDIAN).put(m.duplicate()).also { it.flip(); copy = it }
+    }
+
+    /** True when the data no longer needs the read-back buffer, because [bytes] copied it. */
+    @Synchronized
+    fun isCopied(): Boolean = (copy != null).also { if (it) mapped = null }
+
+    /** Copies the data so the read-back buffer can be reused or freed. On the GPU thread. */
+    @Synchronized
+    fun keep() {
+        bytes()
+        mapped = null
+    }
 }
 
 /**
@@ -512,7 +616,10 @@ public class GpuKernel internal constructor(
     private val device = gpu.device
     private val label = source.name
     private val buffers = HashMap<String, GPUBuffer>()
+    /** Free read-back buffers, by parameter name. */
     private val staging = HashMap<String, GPUBuffer>()
+    /** Read-back buffers lent to results that may still be read, oldest first. */
+    private val lent = ArrayDeque<Lent>()
     private var bindGroup: GPUBindGroup? = null
     private val mutex = Mutex()
     private val maxPerDimension = device.getLimits().maxComputeWorkgroupsPerDimension
@@ -599,15 +706,16 @@ public class GpuKernel internal constructor(
             val errors = popErrorScopes()
             if (errors.isNotEmpty()) throw GpuException("WebGPU rejected the run of ${source.name}: $errors")
 
-            val results = LinkedHashMap<String, ByteBuffer>()
+            val results = LinkedHashMap<String, ReadBack>()
             try {
                 for (p in outputs) {
                     val s = staging.getValue(p.name)
                     pump { s.mapAndAwait(MapMode.Read, 0, s.size) }
-                    val copy = ByteBuffer.allocateDirect(s.size.toInt()).order(ByteOrder.LITTLE_ENDIAN)
-                    copy.put(s.getConstMappedRange(0, s.size)).flip()
-                    s.unmap()
-                    results[p.name] = copy
+                    // Stays mapped: the result reads it in place. The next run of this kernel uses another buffer.
+                    val result = ReadBack(s.getConstMappedRange(0, s.size))
+                    staging.remove(p.name)
+                    lent.addLast(Lent(p.name, s, WeakReference(result)))
+                    results[p.name] = result
                 }
             } catch (e: Exception) {
                 if (isClosed || gpu.isClosed) throw IllegalStateException("${source.name} was closed during run()", e)
@@ -621,10 +729,11 @@ public class GpuKernel internal constructor(
         }
     }
 
-    /** Everything a run sends to the GPU, in one command buffer. */
-    private fun submit(size: Int, uniformData: ByteBuffer, inputs: Map<String, GpuData>, sources: Map<String, GPUBuffer>, outputs: List<KernelManifest.Param>) {
+    /** Everything a run sends to the GPU: the uploads (see [WebGpu.upload]), then one command buffer. */
+    private suspend fun submit(size: Int, uniformData: ByteBuffer, inputs: Map<String, GpuData>, sources: Map<String, GPUBuffer>, outputs: List<KernelManifest.Param>) {
         device.queue.writeBuffer(uniform, 0, uniformData)
         val retired = mutableListOf<GPUBuffer>()
+        reclaimReadBacks(retired)
         // Buffers reused from an earlier run still hold its data, so empty() ones are cleared on the GPU.
         val clears = mutableListOf<GPUBuffer>()
         val copyIn = mutableListOf<Pair<GPUBuffer, GPUBuffer>>()
@@ -634,12 +743,14 @@ public class GpuKernel internal constructor(
             val from = sources[p.name]
             when {
                 from != null -> if (from != buffer) copyIn += from to buffer
-                data.bytes != null -> device.queue.writeBuffer(buffer, 0, data.bytes.duplicate())
+                data.hasContents -> gpu.upload(buffer, data, "$label: ${p.name}")
                 else -> clears += buffer
             }
         }
         for (p in outputs) {
-            ensure(staging, p.name, this.buffers.getValue(p.name).size, USAGE_STAGING, "$label: ${p.name} (read back)", retired)
+            val bytes = this.buffers.getValue(p.name).size
+            if (staging[p.name] == null) takeOldestReadBack(p.name, bytes)?.let { staging[p.name] = it }
+            ensure(staging, p.name, bytes, USAGE_STAGING, "$label: ${p.name} (read back)", retired)
         }
         val group = bindGroup ?: device.createBindGroup(
             GPUBindGroupDescriptor(
@@ -674,6 +785,37 @@ public class GpuKernel internal constructor(
         retired.forEach { it.destroy() }
     }
 
+    /**
+     * Takes back the read-back buffers whose results were dropped or copied by [GpuResult.bytes]: unmapped, they are
+     * free again (spares are destroyed).
+     */
+    private fun reclaimReadBacks(retired: MutableList<GPUBuffer>) {
+        val iterator = lent.iterator()
+        while (iterator.hasNext()) {
+            val l = iterator.next()
+            if (l.result.get()?.isCopied() == false) continue
+            iterator.remove()
+            l.buffer.unmap()
+            if (staging[l.name] == null) staging[l.name] = l.buffer else retired += l.buffer
+        }
+    }
+
+    /**
+     * When results that are still around hold [MAX_LENT] read-back buffers of [name], the oldest one is copied to
+     * memory of its own and its buffer reused, so a loop of runs can't pile up GPU memory before the garbage
+     * collector notices that its results are gone.
+     */
+    private fun takeOldestReadBack(name: String, bytes: Long): GPUBuffer? {
+        if (lent.count { it.name == name } < MAX_LENT) return null
+        val oldest = lent.first { it.name == name }
+        lent.remove(oldest)
+        oldest.result.get()?.keep()
+        oldest.buffer.unmap()
+        if (oldest.buffer.size == bytes) return oldest.buffer
+        oldest.buffer.destroy()
+        return null
+    }
+
     /** Frees this kernel's GPU buffers. Later [run] calls throw [IllegalStateException]. Safe to call more than once. */
     override fun close() {
         if (isClosed || gpu.isClosed || gpu.isOnGpuThread) return closeOnGpuThread()
@@ -684,6 +826,12 @@ public class GpuKernel internal constructor(
     internal fun closeOnGpuThread() {
         if (isClosed) return
         isClosed = true
+        // Results of this kernel stay readable: their data is copied before the read-back buffers go.
+        for (l in lent) {
+            l.result.get()?.keep()
+            l.buffer.destroy()
+        }
+        lent.clear()
         for (b in buffers.values) b.destroy()
         for (b in staging.values) b.destroy()
         uniform.destroy()
@@ -712,6 +860,15 @@ public class GpuKernel internal constructor(
 private const val USAGE_UNIFORM = BufferUsage.Uniform or BufferUsage.CopyDst
 private const val USAGE_STORAGE = BufferUsage.Storage or BufferUsage.CopySrc or BufferUsage.CopyDst
 private const val USAGE_STAGING = BufferUsage.MapRead or BufferUsage.CopyDst
+private const val USAGE_UPLOAD = BufferUsage.MapWrite or BufferUsage.CopySrc
+
+/** Bytes per upload chunk: big enough that per-chunk overhead doesn't matter, small enough not to cost much memory. */
+private const val UPLOAD_CHUNK = 16L shl 20
+
+/** Read-back buffers per kernel parameter that results may hold mapped before the oldest is copied out. */
+private const val MAX_LENT = 2
+
+private class Lent(val name: String, val buffer: GPUBuffer, val result: WeakReference<ReadBack>)
 
 internal actual suspend fun openGpu(): GpuLauncher {
     val gpu = WebGpu.create()

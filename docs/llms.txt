@@ -26,3 +26,4 @@ Key rules for writing a kernel: top-level function, returns Unit, parameters onl
 - [JVM GPU host benchmarks (JSON)](https://github.com/rajumark/kernelin/blob/main/benchmarks/2026-10-20-apple-m5-jvm.json): Apple M5, native WebGPU from a plain JVM app (main)
 - [Android benchmarks (JSON)](https://github.com/rajumark/kernelin/blob/main/benchmarks/2026-10-16-moto-g57-power.json): moto g57 power, Adreno GPU in Chrome
 - [Android native benchmarks (JSON)](https://github.com/rajumark/kernelin/blob/main/benchmarks/2026-10-20-moto-g57-power-native.json): moto g57 power, Adreno 710 through AndroidX WebGPU in an app
+- [Android native benchmarks, fewer copies (JSON)](https://github.com/rajumark/kernelin/blob/main/benchmarks/2026-10-20-moto-g57-power-native-fewer-copies.json): the same phone after the Android host stopped copying the data more than once; end-to-end faster than Chrome for all 5 kernels
