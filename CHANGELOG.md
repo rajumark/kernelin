@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Automatic CPU fallback: `Compute.create()` opens the GPU when there is one and uses the CPU (`KernelinCpu`)
+  when there isn't, and `compute.dispatch(n) { saxpy(alpha = 2f, x = xs, y = ys) }` runs the typed kernel call on
+  whichever it has, so apps need one code path. A GPU device that is lost later switches to the CPU, and the run
+  that hit it is redone there. `cpuReason`, `isGpu` and `description` say where kernels run and why. On the JVM and
+  Android the CPU path uses all cores. Under the hood, the compiler plugin now also records a CPU call in each
+  `KernelLaunch` (`runOnCpu(size)`), with every argument evaluated once.
 - Typed launches: `gpu.dispatch(n) { saxpy(alpha = 2f, x = xs, y = ys) }` runs a kernel on the GPU with a normal
   Kotlin call, so parameter names, types and count are checked at compile time (and completed by the IDE) instead
   of at run time. The arrays the kernel writes hold the results afterwards, like with `KernelinCpu.dispatch`. The

@@ -6,6 +6,23 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.rajumark:kernelin-webgpu>
+final class io.github.rajumark.kernelin.webgpu/Compute : kotlin/AutoCloseable { // io.github.rajumark.kernelin.webgpu/Compute|null[0]
+    final val description // io.github.rajumark.kernelin.webgpu/Compute.description|{}description[0]
+        final fun <get-description>(): kotlin/String // io.github.rajumark.kernelin.webgpu/Compute.description.<get-description>|<get-description>(){}[0]
+    final val isGpu // io.github.rajumark.kernelin.webgpu/Compute.isGpu|{}isGpu[0]
+        final fun <get-isGpu>(): kotlin/Boolean // io.github.rajumark.kernelin.webgpu/Compute.isGpu.<get-isGpu>|<get-isGpu>(){}[0]
+
+    final var cpuReason // io.github.rajumark.kernelin.webgpu/Compute.cpuReason|{}cpuReason[0]
+        final fun <get-cpuReason>(): kotlin/String? // io.github.rajumark.kernelin.webgpu/Compute.cpuReason.<get-cpuReason>|<get-cpuReason>(){}[0]
+
+    final fun close() // io.github.rajumark.kernelin.webgpu/Compute.close|close(){}[0]
+    final suspend fun dispatch(kotlin/Int, kotlin/Function1<io.github.rajumark.kernelin/KernelLaunch, kotlin/Unit>) // io.github.rajumark.kernelin.webgpu/Compute.dispatch|dispatch(kotlin.Int;kotlin.Function1<io.github.rajumark.kernelin.KernelLaunch,kotlin.Unit>){}[0]
+
+    final object Companion { // io.github.rajumark.kernelin.webgpu/Compute.Companion|null[0]
+        final suspend fun create(kotlin/Boolean = ...): io.github.rajumark.kernelin.webgpu/Compute // io.github.rajumark.kernelin.webgpu/Compute.Companion.create|create(kotlin.Boolean){}[0]
+    }
+}
+
 final class io.github.rajumark.kernelin.webgpu/GpuBuffer { // io.github.rajumark.kernelin.webgpu/GpuBuffer|null[0]
     final val isValid // io.github.rajumark.kernelin.webgpu/GpuBuffer.isValid|{}isValid[0]
         final fun <get-isValid>(): kotlin/Boolean // io.github.rajumark.kernelin.webgpu/GpuBuffer.isValid.<get-isValid>|<get-isValid>(){}[0]

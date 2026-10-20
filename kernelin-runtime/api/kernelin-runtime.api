@@ -12,10 +12,12 @@ public final class io/github/rajumark/kernelin/KernelLaunch {
 	public final fun argument (IZ)V
 	public final fun argument (I[F)V
 	public final fun argument (I[I)V
+	public final fun cpu (Lkotlin/jvm/functions/Function0;)V
 	public final fun getArrays ()Ljava/util/Map;
 	public final fun getScalars ()Ljava/util/Map;
 	public final fun getSource ()Lio/github/rajumark/kernelin/KernelSource;
 	public final fun kernel (Lio/github/rajumark/kernelin/KernelSource;)V
+	public final fun runOnCpu (I)V
 }
 
 public final class io/github/rajumark/kernelin/KernelLaunch$Companion {

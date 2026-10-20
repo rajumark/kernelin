@@ -279,7 +279,7 @@ fun scaleInto(factor: Int, on: Boolean, a: FloatArray, out: IntArray) {
     if (on) out[i] = (a[i] * factor).toInt()
 }
 
-private fun fakeOnDispatchFill(labelEnd: String, value: Int): Unit = js("""{
+internal fun fakeOnDispatchFill(labelEnd: String, value: Int): Unit = js("""{
     globalThis.fakeGpu.onDispatch = () => {
         for (const o of globalThis.fakeGpu.objects) {
             if (o.kind === 'buffer' && !o.destroyed && o.label.endsWith(labelEnd)) new Int32Array(o.bytes.buffer).fill(value);
@@ -309,11 +309,11 @@ private fun typedArrayLengthForTest(array: JsAny): Int = js("array.length")
 private fun readIntForTest(array: JsAny, index: Int): Int = js("array[index]")
 
 /** Lets pending JS callbacks (device.lost, timers) run. */
-private suspend fun tick() = nextTick().await<JsAny?>()
+internal suspend fun tick() = nextTick().await<JsAny?>()
 
-private fun nextTick(): Promise<JsAny?> = js("new Promise(resolve => setTimeout(() => resolve(null), 0))")
+internal fun nextTick(): Promise<JsAny?> = js("new Promise(resolve => setTimeout(() => resolve(null), 0))")
 
-private fun fakeLoseDevice(message: String): Unit = js("{ globalThis.fakeGpu.lose('unknown', message); }")
+internal fun fakeLoseDevice(message: String): Unit = js("{ globalThis.fakeGpu.lose('unknown', message); }")
 
 private fun fakeErrorOnNextSubmit(type: String, message: String): Unit = js("{ globalThis.fakeGpu.errorOnSubmit = { type, message }; }")
 
@@ -334,7 +334,7 @@ private fun fakeLabels(): String = js("globalThis.fakeGpu.objects.map(o => o.kin
  * Like a browser it has error scopes, device loss, labels, and fails when a buffer is mapped twice at once.
  * Test hooks live in `globalThis.fakeGpu`.
  */
-private fun installFakeGpu(): Unit = js("""{
+internal fun installFakeGpu(): Unit = js("""{
     const fake = { objects: [], scopes: [], listeners: [], errorOnSubmit: null, failPipeline: null, deviceDestroyed: false };
     globalThis.fakeGpu = fake;
     let resolveLost;

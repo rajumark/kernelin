@@ -1,3 +1,17 @@
+public final class io/github/rajumark/kernelin/webgpu/Compute : java/lang/AutoCloseable {
+	public static final field Companion Lio/github/rajumark/kernelin/webgpu/Compute$Companion;
+	public fun close ()V
+	public final fun dispatch (ILkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getCpuReason ()Ljava/lang/String;
+	public final fun getDescription ()Ljava/lang/String;
+	public final fun isGpu ()Z
+}
+
+public final class io/github/rajumark/kernelin/webgpu/Compute$Companion {
+	public final fun create (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun create$default (Lio/github/rajumark/kernelin/webgpu/Compute$Companion;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
 public final class io/github/rajumark/kernelin/webgpu/GpuBuffer {
 	public final fun getLength ()I
 	public final fun getName ()Ljava/lang/String;

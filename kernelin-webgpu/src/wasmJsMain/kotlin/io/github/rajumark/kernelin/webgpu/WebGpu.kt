@@ -127,8 +127,9 @@ public class WebGpu private constructor(internal val device: JsAny, public val d
      *
      * The kernel is loaded on the first call and reused after that. Throws like [load] and [GpuKernel.run].
      */
-    public suspend fun dispatch(size: Int, kernel: KernelLaunch.() -> Unit): GpuResult {
-        val launch = KernelLaunch.capture(kernel)
+    public suspend fun dispatch(size: Int, kernel: KernelLaunch.() -> Unit): GpuResult = dispatch(size, KernelLaunch.capture(kernel))
+
+    internal suspend fun dispatch(size: Int, launch: KernelLaunch): GpuResult {
         val loaded = launchedLock.withLock {
             launched[launch.source.name]?.takeUnless { it.isClosed } ?: load(launch.source).also { launched[launch.source.name] = it }
         }
@@ -594,3 +595,19 @@ private fun float32ArrayFromMemory(memory: JsAny, address: Int, length: Int): Js
 
 private fun copyToMemory(memory: JsAny, array: JsAny, address: Int): Unit =
     js("{ new Uint8Array(memory.buffer, address, array.byteLength).set(new Uint8Array(array.buffer, array.byteOffset, array.byteLength)); }")
+
+internal actual suspend fun openGpu(): GpuLauncher {
+    val gpu = WebGpu.create()
+    return object : GpuLauncher {
+        override val description: String get() = gpu.description
+
+        override suspend fun launch(size: Int, launch: KernelLaunch): String? = try {
+            gpu.dispatch(size, launch)
+            null
+        } catch (e: GpuException) {
+            gpu.lostReason ?: throw e
+        }
+
+        override fun close() = gpu.close()
+    }
+}

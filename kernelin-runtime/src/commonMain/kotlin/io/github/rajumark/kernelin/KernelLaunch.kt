@@ -27,6 +27,7 @@ public class KernelLaunch private constructor() {
     private var kernel: KernelSource? = null
     private var kernelCalls = 0
     private val values = HashMap<Int, Any>()
+    private var cpuCall: (() -> Unit)? = null
 
     /** The shader of the kernel that was called. */
     public val source: KernelSource get() = kernel ?: throw IllegalStateException("No @Kernel call was recorded")
@@ -41,6 +42,24 @@ public class KernelLaunch private constructor() {
         val result = LinkedHashMap<String, Any>()
         source.manifest.params.forEachIndexed { i, p -> if (keep(p)) result[p.name] = values.getValue(i) }
         return result
+    }
+
+    /**
+     * Runs the recorded kernel call on the CPU for ids `0 until size`, with the same argument values, like
+     * `KernelinCpu.dispatch(size) { saxpy(...) }`. The arrays the kernel writes hold the results afterwards.
+     * On the JVM (and Android) it uses all CPU cores; elsewhere it runs on the calling thread.
+     */
+    public fun runOnCpu(size: Int) {
+        val call = checkNotNull(cpuCall) {
+            "The launch of ${source.name} has no CPU call; it was compiled by an older Kernelin compiler plugin"
+        }
+        dispatchOnAllCores(size, call)
+    }
+
+    /** Records how to run the same kernel call on the CPU (the arguments were evaluated once, before). */
+    @KernelinGeneratedApi
+    public fun cpu(call: () -> Unit) {
+        cpuCall = call
     }
 
     /** Records the kernel. Called after its arguments, so they keep Kotlin's evaluation order. */

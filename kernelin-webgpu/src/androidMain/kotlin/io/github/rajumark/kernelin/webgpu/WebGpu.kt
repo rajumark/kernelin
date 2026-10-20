@@ -232,8 +232,9 @@ public class WebGpu private constructor(
      *
      * The kernel is loaded on the first call and reused after that. Throws like [load] and [GpuKernel.run].
      */
-    public suspend fun dispatch(size: Int, kernel: KernelLaunch.() -> Unit): GpuResult {
-        val launch = KernelLaunch.capture(kernel)
+    public suspend fun dispatch(size: Int, kernel: KernelLaunch.() -> Unit): GpuResult = dispatch(size, KernelLaunch.capture(kernel))
+
+    internal suspend fun dispatch(size: Int, launch: KernelLaunch): GpuResult {
         val loaded = launchedLock.withLock {
             launched[launch.source.name]?.takeUnless { it.isClosed } ?: load(launch.source).also { launched[launch.source.name] = it }
         }
@@ -665,3 +666,19 @@ public class GpuKernel internal constructor(
 private const val USAGE_UNIFORM = BufferUsage.Uniform or BufferUsage.CopyDst
 private const val USAGE_STORAGE = BufferUsage.Storage or BufferUsage.CopySrc or BufferUsage.CopyDst
 private const val USAGE_STAGING = BufferUsage.MapRead or BufferUsage.CopyDst
+
+internal actual suspend fun openGpu(): GpuLauncher {
+    val gpu = WebGpu.create()
+    return object : GpuLauncher {
+        override val description: String get() = gpu.description
+
+        override suspend fun launch(size: Int, launch: KernelLaunch): String? = try {
+            gpu.dispatch(size, launch)
+            null
+        } catch (e: GpuException) {
+            gpu.lostReason ?: throw e
+        }
+
+        override fun close() = gpu.close()
+    }
+}

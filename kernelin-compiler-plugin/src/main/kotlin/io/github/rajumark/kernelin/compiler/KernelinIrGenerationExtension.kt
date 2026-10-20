@@ -8,13 +8,18 @@ import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.builders.IrBuilderWithScope
+import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.builders.irBlock
+import org.jetbrains.kotlin.ir.builders.irBlockBody
+import org.jetbrains.kotlin.ir.builders.irTemporary
 import org.jetbrains.kotlin.ir.builders.irCall
 import org.jetbrains.kotlin.ir.builders.irCallConstructor
 import org.jetbrains.kotlin.ir.builders.irGet
 import org.jetbrains.kotlin.ir.builders.irInt
 import org.jetbrains.kotlin.ir.builders.irString
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrFunction
@@ -22,11 +27,15 @@ import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrParameterKind
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrValueParameter
+import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrFunctionExpression
 import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
 import org.jetbrains.kotlin.ir.expressions.IrRichCallableReference
+import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
+import org.jetbrains.kotlin.ir.expressions.impl.IrFunctionExpressionImpl
+import org.jetbrains.kotlin.ir.types.typeWith
 import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.util.kotlinFqName
@@ -37,6 +46,7 @@ import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.name.SpecialNames
 import java.io.File
 
 internal val KERNEL_ANNOTATION = FqName("io.github.rajumark.kernelin.Kernel")
@@ -186,20 +196,58 @@ class KernelinIrGenerationExtension(
                 val builder = DeclarationIrBuilder(context, lambda.symbol, expression.startOffset, expression.endOffset)
                 val source = builder.newKernelSource(shader, expression) ?: return expression
                 // Arguments first, in Kotlin order (the call already holds them after any reordering temporaries).
+                // Each is evaluated once, into a temporary that the GPU recording and the CPU call both use.
                 return builder.irBlock(resultType = context.irBuiltIns.unitType) {
+                    val temps = values.map { irTemporary(it) }
                     params.forEachIndexed { i, p ->
                         val argument = launchClass.function("argument") { it.parameters[2].type.classFqName == p.type.classFqName }
                         +irCall(argument).apply {
                             arguments[0] = irGet(receiver)
                             arguments[1] = irInt(i)
-                            arguments[2] = values[i]
+                            arguments[2] = irGet(temps[i])
                         }
+                    }
+                    +irCall(launchClass.function("cpu") { true }).apply {
+                        arguments[0] = irGet(receiver)
+                        arguments[1] = cpuCall(lambda, kernel, params, temps, expression)
                     }
                     +irCall(launchClass.function("kernel") { true }).apply {
                         arguments[0] = irGet(receiver)
                         arguments[1] = source
                     }
                 }
+            }
+
+            /** `{ kernel(t0, t1, ...) }`: the same kernel call with the recorded values, for `KernelLaunch.runOnCpu`. */
+            private fun cpuCall(
+                parent: IrFunction,
+                kernel: IrSimpleFunction,
+                params: List<IrValueParameter>,
+                temps: List<IrVariable>,
+                at: IrElement,
+            ): IrExpression {
+                val unit = context.irBuiltIns.unitType
+                val function = context.irFactory.buildFun {
+                    startOffset = at.startOffset
+                    endOffset = at.endOffset
+                    origin = IrDeclarationOrigin.LOCAL_FUNCTION_FOR_LAMBDA
+                    name = SpecialNames.ANONYMOUS
+                    visibility = DescriptorVisibilities.LOCAL
+                    returnType = unit
+                }
+                function.parent = parent
+                function.body = DeclarationIrBuilder(context, function.symbol, at.startOffset, at.endOffset).irBlockBody {
+                    +irCall(kernel.symbol).apply {
+                        params.forEachIndexed { i, p -> arguments[p.indexInParameters] = irGet(temps[i]) }
+                    }
+                }
+                return IrFunctionExpressionImpl(
+                    at.startOffset,
+                    at.endOffset,
+                    context.irBuiltIns.functionN(0).typeWith(unit),
+                    function,
+                    IrStatementOrigin.LAMBDA,
+                )
             }
 
             private fun IrClass.function(name: String, accept: (IrSimpleFunction) -> Boolean): IrSimpleFunction =

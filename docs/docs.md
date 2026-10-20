@@ -392,6 +392,28 @@ gpu.dispatch(x.size) { saxpy(alpha = 2.5f, x = x, y = y) }   // y now holds the 
 Use `gpu.load(...)` and `run(...)` with names (below) when you need more control: data that stays on the GPU
 (`GpuData.of(buffer)`), `GpuData.empty(n)` outputs, or choosing what to read back.
 
+### GPU or CPU in one call **(main)**
+
+`Compute` runs kernels on the GPU when the device has one, and on the CPU (`KernelinCpu`) when it doesn't, so you
+don't write two code paths:
+
+```kotlin
+val compute = Compute.create()                         // the GPU if it can be opened, else the CPU
+compute.dispatch(n) { saxpy(alpha = 2.5f, x = x, y = y) }  // y holds the result either way
+println(compute.description)                           // "GPU: apple metal-3 (Metal)" or "CPU (no GPU: ...)"
+```
+
+- The launch block is a typed kernel call, checked by the compiler, like `WebGpu.dispatch`.
+- On the CPU, the same call runs for every id: on all cores on the JVM and Android, on the calling thread on
+  Wasm, JS and Native. Each argument is evaluated once, not once per thread.
+- `Compute.create()` uses the CPU when there is no WebGPU, no GPU adapter (for example an Android emulator) or the
+  device can't be opened. `cpuReason` says why; `isGpu` says where kernels run now.
+- If the GPU device is **lost** later, the run that hit it is redone on the CPU, and later runs use the CPU too.
+  Other GPU errors (a rejected pipeline, out of memory) still throw: they are bugs to fix, not missing hardware.
+- `Compute.create(useGpu = false)` always uses the CPU, which is handy in tests and for comparing results.
+- Results match within the [differences between CPU and GPU](#differences-between-cpu-and-gpu) (Float rounding).
+- For data that stays on the GPU between runs, use `WebGpu` directly.
+
 ### On Android **(main)**
 
 On Android, `kernelin-webgpu` runs kernels through [AndroidX WebGPU](https://developer.android.com/jetpack/androidx/releases/webgpu)
@@ -657,6 +679,20 @@ as the one `WebGpu.dispatch` takes). For GPU hosts; users just write the block.
 | `source` | The kernel's `KernelSource` |
 | `scalars` | `Int` / `Float` / `Boolean` arguments by parameter name |
 | `arrays` | `IntArray` / `FloatArray` arguments by parameter name (the same array objects) |
+| `runOnCpu(size)` | Runs the same call on the CPU for ids `0 until size` (all cores on the JVM and Android) |
+
+### `Compute` **(main)**
+
+Runs kernels on the GPU when there is one, else on the CPU. In `kernelin-webgpu` (Kotlin/Wasm and Android).
+
+| Member | Description |
+|---|---|
+| `suspend Compute.create(useGpu = true)` | Opens the GPU, or uses the CPU when there is none (or when `useGpu` is false). Never throws for missing hardware |
+| `suspend dispatch(size) { kernel(...) }` | Runs one typed kernel call on the GPU or the CPU; the arrays the kernel writes hold the results |
+| `isGpu` | `true` while kernels run on the GPU |
+| `cpuReason` | Why kernels run on the CPU (no GPU, lost device, `useGpu = false`, closed), or `null` |
+| `description` | `GPU: <name>` or `CPU (<reason>)`, for logs |
+| `close()` | Frees the GPU; later runs use the CPU |
 
 ### `KernelinShaders` (JVM)
 

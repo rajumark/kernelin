@@ -92,7 +92,10 @@ gpu.dispatch(n) { saxpy(alpha = 2.5f, x = x, y = y) }  // a normal call: names a
 // y now holds the result, just like after KernelinCpu.dispatch(n) { saxpy(2.5f, x, y) }
 ```
 
-Typed `dispatch` is on `main` (not released yet). With 0.3.0, or for more control (data that stays on the GPU),
+On a device that may have no GPU, `Compute.create()` picks the GPU when there is one and the CPU when not, with the
+same `compute.dispatch(n) { saxpy(...) }` call.
+
+Typed `dispatch` and `Compute` are on `main` (not released yet). With 0.3.0, or for more control (data that stays on the GPU),
 load the kernel and pass arguments by name:
 
 ```kotlin

@@ -92,6 +92,28 @@ class KernelLaunchTest {
     }
 
     @Test
+    fun `a recorded launch runs on the cpu with the same values, evaluated once`() {
+        val c = compileOk(
+            """
+            var evaluations = 0
+            fun run(): List<Any> {
+                val ys = floatArrayOf(1f, 1f, 1f)
+                val launch = launch { saxpy(alpha = 3f, x = floatArrayOf(1f, 2f, 3f).also { evaluations++ }, y = ys) }
+                launch.runOnCpu(3)
+                val outs = FloatArray(3)
+                val counts = intArrayOf(1, 2, 3)
+                launch { mixed(on = true, counts = counts, times = 5, out = outs) }.runOnCpu(3)
+                return listOf(ys.toList(), outs.toList(), evaluations)
+            }
+            """,
+        )
+        val (ys, outs, evaluations) = c.call("run") as List<*>
+        assertEquals(listOf(4f, 7f, 10f), ys)
+        assertEquals(listOf(5f, 10f, 15f), outs)
+        assertEquals(1, evaluations, "Arguments are evaluated once, not once per thread")
+    }
+
+    @Test
     fun `kernel calls outside launch blocks still run on the cpu`() {
         val c = compileOk(
             """

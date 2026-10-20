@@ -27,7 +27,9 @@ final class io.github.rajumark.kernelin/KernelLaunch { // io.github.rajumark.ker
     final fun argument(kotlin/Int, kotlin/FloatArray) // io.github.rajumark.kernelin/KernelLaunch.argument|argument(kotlin.Int;kotlin.FloatArray){}[0]
     final fun argument(kotlin/Int, kotlin/Int) // io.github.rajumark.kernelin/KernelLaunch.argument|argument(kotlin.Int;kotlin.Int){}[0]
     final fun argument(kotlin/Int, kotlin/IntArray) // io.github.rajumark.kernelin/KernelLaunch.argument|argument(kotlin.Int;kotlin.IntArray){}[0]
+    final fun cpu(kotlin/Function0<kotlin/Unit>) // io.github.rajumark.kernelin/KernelLaunch.cpu|cpu(kotlin.Function0<kotlin.Unit>){}[0]
     final fun kernel(io.github.rajumark.kernelin/KernelSource) // io.github.rajumark.kernelin/KernelLaunch.kernel|kernel(io.github.rajumark.kernelin.KernelSource){}[0]
+    final fun runOnCpu(kotlin/Int) // io.github.rajumark.kernelin/KernelLaunch.runOnCpu|runOnCpu(kotlin.Int){}[0]
 
     final object Companion { // io.github.rajumark.kernelin/KernelLaunch.Companion|null[0]
         final fun capture(kotlin/Function1<io.github.rajumark.kernelin/KernelLaunch, kotlin/Unit>): io.github.rajumark.kernelin/KernelLaunch // io.github.rajumark.kernelin/KernelLaunch.Companion.capture|capture(kotlin.Function1<io.github.rajumark.kernelin.KernelLaunch,kotlin.Unit>){}[0]
