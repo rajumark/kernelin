@@ -273,6 +273,31 @@
     <li>Reproduce: <code>scripts/bench-android.sh &lt;bench folder&gt;</code> (GPU, through <code>adb reverse</code>) and <code>scripts/bench-android-cpu.sh</code> (CPU on ART). Raw data: <code>benchmarks/2026-10-16-moto-g57-power.json</code></li>
   </ul>
 
+  <h3>📱 Android phone, native app (Oct 20)</h3>
+  <p>The same 5 kernels on the same <b>moto g57 power</b>, now from a normal Android app through Kernelin's native Android GPU host (AndroidX WebGPU on Vulkan, Adreno 710), with no browser. CPU: the same Kotlin kernels in the app through <code>KernelinCpu</code>. Every output matches the Kotlin CPU result. The 16 Android GPU tests also passed on this phone, none skipped.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr>
+      <th>Kernel</th><th class="num">CPU 1 core</th><th class="num">CPU 8 cores</th>
+      <th class="num">GPU kernel</th><th class="num">GPU end-to-end</th><th class="num">Chrome end-to-end (Oct 16)</th><th class="num">Correct</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><b>vectorAdd</b></td><td class="num">396 ms</td><td class="num">93 ms</td><td class="num"><b>14.7 ms</b></td><td class="num">385 ms</td><td class="num">342 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>saxpy</b></td><td class="num">384 ms</td><td class="num">90 ms</td><td class="num"><b>15.2 ms</b></td><td class="num">324 ms</td><td class="num">255 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>blur</b></td><td class="num">570 ms</td><td class="num">156 ms</td><td class="num"><b>29.5 ms</b></td><td class="num">279 ms</td><td class="num">298 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>waves</b></td><td class="num">11.73 s</td><td class="num">2.22 s</td><td class="num"><b>60.9 ms</b></td><td class="num">192 ms</td><td class="num">126 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+      <tr><td><b>mandelbrot</b></td><td class="num">1.60 s</td><td class="num">398 ms</td><td class="num"><b>47.8 ms</b></td><td class="num">97 ms</td><td class="num">94 ms</td><td class="num"><span class="tag good">100%</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <ul>
+    <li><b>Same GPU speed as Chrome:</b> the kernel times match the Chrome run within 1–2%, as expected (both use Dawn on Vulkan).</li>
+    <li><b>Copying is not faster yet:</b> end-to-end, the native host is slower than Chrome for 4 of 5 kernels. Each run copies the data more than once (<code>GpuData.of</code> into a direct buffer, the read-back buffer, then the Kotlin array). Cutting those copies is follow-up work.</li>
+    <li><b>Heavy math still wins big:</b> waves is 36× faster than all 8 cores on the GPU (kernel only), 12× end-to-end.</li>
+    <li><b>Phone memory:</b> the benchmark first ran out of the 512 MB app heap with 64 MB arrays. Fixed in the benchmark (fewer copies, each case in its own process). Two new device tests check that runs and closed kernels don't keep memory alive (16 MB kept over 20 runs: just the last one).</li>
+    <li>Reproduce: <code>scripts/bench-android-app.sh benchmarks/&lt;date&gt;-&lt;phone&gt;-native.json</code>. Raw data: <code>benchmarks/2026-10-20-moto-g57-power-native.json</code></li>
+  </ul>
+
   <!-- ============================================================ HOW IT WORKS -->
   <h2>⚙️ How it works</h2>
   <div class="flow">
@@ -518,6 +543,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
     <div class="row"><span>Oct 16</span><span><b>Android phone benchmarks.</b> moto g57 power (Snapdragon SM6435, Adreno 7xx, Android 17, Chrome 155). GPU in Chrome over USB (<code>scripts/bench-android.sh</code>, <code>adb reverse</code>) and the same Kotlin kernels on the phone's CPU via ART (<code>scripts/bench-android-cpu.sh</code>, <code>dalvikvm</code>). All 5 kernels 100% correct (mandelbrot too); waves 33× faster than all 8 cores, 196× faster than 1 core. Copies are slow on the phone, so light kernels lose end-to-end. Live demo race on the phone: GPU 35 ms vs Kotlin/Wasm CPU 1.11 s (32×).</span></div>
     <div class="row"><span>Oct 16</span><span><b>IDE errors while you type.</b> K2 frontend (FIR) checkers for <code>@Kernel</code> functions: signature, parameter and variable types, Double/Long/String values, lambdas (except <code>repeat</code>), library calls, object creation, exceptions, casts, nullable values. Same messages as the build. They only report what the translator rejects anyway: the first run caught one false positive (<code>x in 10 downTo 0</code>), fixed, and then 2,000 fuzzed kernels passed. 7 new tests; 47 tests in total (36 compiler, 6 runtime, 5 samples).</span></div>
     <div class="row"><span>Oct 16</span><span><b>v0.2.0 released on Maven Central</b> with everything above: more Kotlin in kernels, Kotlin-exact GPU math, the fuzzer and IDE checks.</span></div>
+    <div class="row"><span>Oct 20</span><span><b>Native Android GPU host tested on a real phone</b> (plan item 6 done). moto g57 power, Adreno 710 on Vulkan through AndroidX WebGPU: 16/16 device tests passed, none skipped; in-app benchmark 5/5 kernels 100% correct, GPU kernel times equal to Chrome's. End-to-end copies are slower than Chrome for 4 of 5 kernels (extra copies, follow-up). The benchmark app now runs every case in its own process and copies less, so 64 MB arrays fit in the phone's app heap.</span></div>
   </div>
 
   </div><!-- /tab-report -->

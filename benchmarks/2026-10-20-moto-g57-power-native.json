@@ -1,0 +1,12 @@
+{
+  "device": "motorola moto g57 power, Android 17 (API 37), 8 CPU cores",
+  "gpu": "qualcomm adreno-7xx Adreno (TM) 710 (Vulkan)",
+  "scale": 1,
+  "results": [
+    {"name":"vectorAdd","size":16777216,"gpuKernelMs":14.709,"gpuEndToEndMs":385.286,"cpuSingleMs":396.472,"cpuParallelMs":92.998,"matchPct":100,"maxAbsErr":0},
+    {"name":"saxpy","size":16777216,"gpuKernelMs":15.227,"gpuEndToEndMs":323.688,"cpuSingleMs":383.987,"cpuParallelMs":90.465,"matchPct":100,"maxAbsErr":0},
+    {"name":"blur","size":16777216,"gpuKernelMs":29.507,"gpuEndToEndMs":279.092,"cpuSingleMs":570.048,"cpuParallelMs":156.204,"matchPct":100,"maxAbsErr":0},
+    {"name":"waves","size":4194304,"gpuKernelMs":60.897,"gpuEndToEndMs":191.823,"cpuSingleMs":11729.013,"cpuParallelMs":2218.924,"matchPct":100,"maxAbsErr":0},
+    {"name":"mandelbrot","size":4194304,"gpuKernelMs":47.809,"gpuEndToEndMs":96.75,"cpuSingleMs":1604.439,"cpuParallelMs":398.142,"matchPct":100,"maxAbsErr":0}
+  ]
+}

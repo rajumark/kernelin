@@ -486,7 +486,9 @@ val y2 = result.floats("y")
 - Needs `minSdk` 26. The library adds Dawn's native code for `arm64-v8a`, `armeabi-v7a`, `x86` and `x86_64`
   (several MB per ABI), so use App Bundles or ABI splits.
 - Benchmark on your phone: `scripts/bench-android-app.sh` builds and runs the `samples-android` app, which times
-  the sample kernels on the phone's GPU and CPU and checks that the results match.
+  the sample kernels on the phone's GPU and CPU and checks that the results match. On a moto g57 power (Adreno 710)
+  the GPU kernel times equal Chrome's on the same phone; end-to-end runs (copying data in and out) are still slower
+  than Chrome for light kernels, because the Android host copies the data more than once.
 
 ### On the desktop JVM **(main)**
 
@@ -1127,7 +1129,7 @@ Test every kernel on the CPU with KernelinCpu.dispatch(size) { kernel(...) }.
 
 - Workgroup shared memory and atomics (for matrix multiply, reductions and histograms); 2D/3D ids are done on main
 - Vector types
-- Android: kernels already run and match on a phone GPU in Chrome; next, AndroidX WebGPU natively
+- Android: done on main, natively through AndroidX WebGPU and tested on a real phone GPU; next, fewer copies per run
 - Done in 0.2.0: IDE errors while you type (FIR checkers), `Boolean` parameters, arrays in helpers, `repeat`, labeled `break`/`continue`, `in` ranges, `isNaN`, Kotlin-exact constant math and shifts; GPU-vs-CPU differential tests, a fuzzer, ABI checks and coverage gates
 
 **Later (2.0 and beyond)**

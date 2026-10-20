@@ -26,12 +26,28 @@ class BenchCase(
     val source: KernelSource,
     val size: Int,
     val scalars: Map<String, Any>,
-    /** Inputs by parameter name (FloatArray or IntArray). */
-    val inputs: Map<String, Any>,
-    /** Every buffer the kernel writes, as a zeroed prototype (an input may also be an output). */
-    val outputs: Map<String, Any>,
+    inputs: Map<String, Any>,
+    outputs: Map<String, Any>,
     val cpu: (buffers: Map<String, Any>, parallel: Boolean) -> Unit,
-)
+) {
+    /** Inputs by parameter name (FloatArray or IntArray). */
+    val inputs: MutableMap<String, Any> = LinkedHashMap(inputs)
+
+    /**
+     * Every buffer the kernel writes, as a zeroed prototype. A buffer that is also an input uses the input instead,
+     * so its unused prototype doesn't take up heap.
+     */
+    val outputs: MutableMap<String, Any> = LinkedHashMap(outputs.mapValues { (name, v) -> inputs[name] ?: v })
+
+    /**
+     * Lets go of the arrays once the case is measured. A finished coroutine can still hold a reference to the case,
+     * and the next case's 64 MB arrays only fit in a phone's app heap once these are gone.
+     */
+    fun release() {
+        inputs.clear()
+        outputs.clear()
+    }
+}
 
 class BenchResult(
     val name: String,
@@ -109,24 +125,40 @@ suspend fun BenchCase.measure(gpu: WebGpu?): BenchResult {
     val cpuParallel = median { val b = fresh(); time { cpu(b, true) } }
     if (gpu == null) return BenchResult(name, size, null, null, cpuSingle, cpuParallel, null, null)
 
-    val expected = fresh().also { cpu(it, true) }
+    // Only the outputs, copied: fresh() reuses the zeroed output arrays.
+    var expected = fresh().also { cpu(it, true) }.filterKeys { it in outputs }.mapValues { (_, v) -> copy(v) }
     val kernel = gpu.load(source)
     try {
-        var last: GpuResult? = null
-        val endToEnd = medianSuspend {
-            val data = gpuData(fresh())
-            val start = System.nanoTime()
-            val r = kernel.run(size, scalars, data)
-            outputs.keys.forEach { read(r, it) }
-            last = r
-            (System.nanoTime() - start) / 1e6
-        }
+        val last = LastResult()
+        val endToEnd = medianSuspend { endToEnd(kernel, last) }
+        // Checked now, so the result's memory is free again for the kernel-only runs.
+        val (match, maxErr) = compare(expected, last.result!!)
+        last.result = null
+        expected = emptyMap()
         val kernelOnly = medianSuspend { (chained(kernel, 20) - chained(kernel, 0)) / 20 }
-        val (match, maxErr) = compare(expected, last!!)
         return BenchResult(name, size, kernelOnly, endToEnd, cpuSingle, cpuParallel, match, maxErr)
     } finally {
         kernel.close()
     }
+}
+
+/** Holds the result of the latest end-to-end run, for checking it against the CPU. */
+private class LastResult(var result: GpuResult? = null)
+
+/**
+ * Milliseconds for one run: upload, run, and read every output into a Kotlin array. Its own function, not part of
+ * the inline median loop, so no coroutine slot keeps the previous result alive: the 16M-element cases need its
+ * 64 MB back before the next run fits in a phone's app heap.
+ */
+private suspend fun BenchCase.endToEnd(kernel: GpuKernel, last: LastResult): Double {
+    last.result = null
+    val data = gpuData()
+    val start = System.nanoTime()
+    val r = kernel.run(size, scalars, data)
+    outputs.keys.forEach { read(r, it) }
+    val ms = (System.nanoTime() - start) / 1e6
+    last.result = r
+    return ms
 }
 
 /**
@@ -134,7 +166,7 @@ suspend fun BenchCase.measure(gpu: WebGpu?): BenchResult {
  * GPU work is finished). Calling it with 20 and 0 and subtracting leaves the time of 20 dispatches.
  */
 private suspend fun BenchCase.chained(kernel: GpuKernel, runs: Int): Double {
-    var r = kernel.run(size, scalars, gpuData(fresh()), readBack = emptySet())
+    var r = kernel.run(size, scalars, gpuData(), readBack = emptySet())
     fun onGpu(r: GpuResult) = kernel.manifest.buffers.associate { it.name to GpuData.of(r.buffer(it.name)) }
     val start = System.nanoTime()
     repeat(runs) { r = kernel.run(size, scalars, onGpu(r), readBack = emptySet()) }
@@ -168,20 +200,35 @@ private fun BenchCase.compare(expected: Map<String, Any>, result: GpuResult): Pa
     return 100.0 * (total - bad) / total to maxErr
 }
 
-/** Fresh copies of the inputs plus zeroed outputs, so every run starts from the same data. */
+/**
+ * The data for one run, so every run starts from the same values: a copy of each input the kernel also writes,
+ * the zeroed output arrays (reused, not copied), and the read-only inputs as they are. Copying only what the kernel
+ * writes keeps the 16M-element cases inside a phone's app heap.
+ */
 private fun BenchCase.fresh(): Map<String, Any> =
-    outputs.filterKeys { it !in inputs }.mapValues { (_, v) -> copy(v) } + inputs.mapValues { (_, v) -> copy(v) }
+    inputs.filterKeys { it !in outputs } + outputs.mapValues { (name, v) -> inputs[name]?.let(::copy) ?: v.also(::zero) }
 
-private fun gpuData(buffers: Map<String, Any>): Map<String, GpuData> = buffers.mapValues { (_, v) ->
-    when (v) {
-        is FloatArray -> GpuData.of(v)
-        is IntArray -> GpuData.of(v)
+/**
+ * The data for one GPU run. [GpuData.of] copies, so the original inputs are used as they are; outputs that aren't
+ * also inputs start as [GpuData.empty] (zeroed on the GPU, no upload).
+ */
+private fun BenchCase.gpuData(): Map<String, GpuData> = (outputs + inputs).mapValues { (name, v) ->
+    when {
+        name !in inputs -> GpuData.empty(if (v is FloatArray) v.size else (v as IntArray).size)
+        v is FloatArray -> GpuData.of(v)
+        v is IntArray -> GpuData.of(v)
         else -> error("unsupported buffer $v")
     }
 }
 
 private fun BenchCase.read(r: GpuResult, name: String): Any =
     if (outputs.getValue(name) is IntArray) r.ints(name) else r.floats(name)
+
+private fun zero(v: Any) = when (v) {
+    is FloatArray -> v.fill(0f)
+    is IntArray -> v.fill(0)
+    else -> error("unsupported buffer $v")
+}
 
 private fun copy(v: Any): Any = when (v) {
     is FloatArray -> v.copyOf()

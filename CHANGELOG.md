@@ -39,7 +39,10 @@
 - The argument checks of `GpuKernel.run` moved to common code, so every GPU host rejects the same calls.
 - New `samples-android` app and `scripts/bench-android-app.sh`: the benchmark kernels on a phone's GPU (native, not
   Chrome) and CPU, with a GPU-vs-CPU result check. Android GPU tests: `gradle :kernelin-webgpu:connectedAndroidDeviceTest`
-  (skipped on emulators, which have no real GPU for WebGPU).
+  (skipped on emulators, which have no real GPU for WebGPU). Tested on a moto g57 power (Adreno 710, Vulkan): all
+  device tests pass and the 5 benchmark kernels match the CPU; GPU kernel times equal Chrome's on the same phone.
+  The script runs every benchmark case in its own app process, so 64 MB arrays fit in a phone's app heap. New
+  device tests check that runs and closed kernels don't keep their callers' memory alive.
 
 ## 0.3.0 (2026-10-19)
 

@@ -265,4 +265,48 @@ class AndroidGpuTest {
         val bad = io.github.rajumark.kernelin.KernelSource("test.bad", good.wgsl.replace("fn ", "fun "), good.manifestJson)
         assertContains(assertFailsWith<IllegalArgumentException> { gpu.load(bad) }.message!!, "rejected")
     }
+
+    /**
+     * Each run must let go of its caller once it returns. A caller that keeps a 16 MB array across `run` (a coroutine
+     * keeps it in its continuation) must get that memory back, or apps that run big kernels again and again run out
+     * of heap.
+     */
+    @Test
+    fun runsDoNotKeepTheCallerAlive(): Unit = runBlocking {
+        val kernel = gpu.load(kernelSource(::saxpy))
+        val before = usedHeap()
+        repeat(20) { runHolding(kernel, FloatArray(4 shl 20)) }
+        val grown = usedHeap() - before
+        println("Kernelin Android GPU: heap grew ${grown shr 20} MB over 20 runs")
+        assertTrue(grown < 32L shl 20, "20 runs kept ${grown shr 20} MB alive; 16 MB per run means each run leaks its caller")
+    }
+
+    /** Like [runsDoNotKeepTheCallerAlive], with a new kernel for every run that is closed afterwards. */
+    @Test
+    fun closedKernelsDoNotKeepTheCallerAlive(): Unit = runBlocking {
+        val before = usedHeap()
+        repeat(20) {
+            val kernel = gpu.load(kernelSource(::saxpy))
+            try {
+                runHolding(kernel, FloatArray(4 shl 20))
+            } finally {
+                kernel.close()
+            }
+        }
+        val grown = usedHeap() - before
+        println("Kernelin Android GPU: heap grew ${grown shr 20} MB over 20 kernels")
+        assertTrue(grown < 32L shl 20, "20 closed kernels kept ${grown shr 20} MB alive; 16 MB each means each keeps its last caller")
+    }
+
+    private suspend fun runHolding(kernel: GpuKernel, big: FloatArray): Float {
+        val x = FloatArray(64) { 1f }
+        val r = kernel.run(64, mapOf("alpha" to 2f), mapOf("x" to GpuData.of(x), "y" to GpuData.of(x)))
+        return r.floats("y")[0] + big[0]
+    }
+
+    private fun usedHeap(): Long {
+        val rt = Runtime.getRuntime()
+        repeat(3) { System.gc(); System.runFinalization() }
+        return rt.totalMemory() - rt.freeMemory()
+    }
 }
