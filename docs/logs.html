@@ -527,8 +527,8 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
   <h2>🧭 Plan: good to great</h2>
 <!-- PLAN:START -->
 <div class="plan-progress">
-  <div class="plan-num"><b>24%</b> done · 10 of 42 items · 2 in progress · updated 2026-10-20</div>
-  <div class="plan-bar"><span class="d" style="width:23.81%"></span><span class="w" style="width:4.76%"></span></div>
+  <div class="plan-num"><b>26%</b> done · 11 of 42 items · 1 in progress · updated 2026-10-20</div>
+  <div class="plan-bar"><span class="d" style="width:26.19%"></span><span class="w" style="width:2.38%"></span></div>
 </div>
 <p style="color:var(--ink-2);font-size:13px">Every item counts the same. Each one ends with tests, docs, changelog, commit and push.</p>
 <h3>Phase 0: Fix what's there <span class="tag good">4 / 4</span></h3>
@@ -538,7 +538,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
   <li class="done"><span class="box">✓</span><span class="t"><b>3.</b> More platforms: runtime for JS and native targets, Gradle plugin for Android / AGP 9, <code>kernelin { enabled }</code> (commit 3abdb34; GitHub CI passed)</span></li>
   <li class="done"><span class="box">✓</span><span class="t"><b>4.</b> Translator safety: loops that can't hang, NaN/-0 in min/max/compareTo, hypot/log10, IDE checks inside helpers, JSON escaping (commit 9ec6bad; IDE checks tested through the compiler only, not in a real IDE)</span></li>
 </ul>
-<h3>Phase 1: Make it real <span class="tag blue">5 / 14</span></h3>
+<h3>Phase 1: Make it real <span class="tag blue">6 / 14</span></h3>
 <ul class="check">
   <li class="done"><span class="box">✓</span><span class="t"><b>5.</b> Release 0.3.0 with everything from Phase 0 (on Maven Central 2026-10-19, tag v0.3.0, commit 5989bd8; checked from Central on JVM, JS, Native and Wasm)</span></li>
   <li class="doing"><span class="box"></span><span class="t"><b>6.</b> Native Android GPU runner (AndroidX WebGPU), plus an Android benchmark inside an app, not Chrome (code on main, commit a880168; waiting for a run on the real phone GPU: emulators only offer Dawn's Null adapter) <span class="tag blue">in progress</span></span></li>
@@ -547,7 +547,7 @@ samples/build/classes/kotlin/main/kernelin/*.wgsl</code></pre>
   <li class="done"><span class="box">✓</span><span class="t"><b>9.</b> 2D/3D thread ids (commit 39dda66)</span></li>
   <li><span class="box"></span><span class="t"><b>10.</b> Shared workgroup memory and barriers</span></li>
   <li><span class="box"></span><span class="t"><b>11.</b> Atomics (for histograms and counters), with a GPU sum and histogram example</span></li>
-  <li class="doing"><span class="box"></span><span class="t"><b>12.</b> Desktop JVM GPU runner (wgpu4k or similar), so JVM apps don't need a browser <span class="tag blue">in progress</span></span></li>
+  <li class="done"><span class="box">✓</span><span class="t"><b>12.</b> Desktop JVM GPU runner (wgpu4k or similar), so JVM apps don't need a browser (commit 9bfb652)</span></li>
   <li><span class="box"></span><span class="t"><b>13.</b> Real data types: <code>ByteArray</code> / packed RGBA8 pixels, <code>UInt</code>, structs (data classes), <code>vec2</code>/<code>vec4</code>, so users stop unpacking bits by hand</span></li>
   <li class="done"><span class="box">✓</span><span class="t"><b>14.</b> Built-in GPU-safe random numbers (2 of the 3 showcase apps wrote their own hash RNG) (commit 6fc9386)</span></li>
   <li><span class="box"></span><span class="t"><b>15.</b> Textures with bilinear sampling, and showing results on screen (canvas/Compose) without reading them back</span></li>
